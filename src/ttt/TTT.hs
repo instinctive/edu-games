@@ -1,40 +1,38 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module TTT
-    ( TTT
-    , initTTT, showTTT, parseTTT
-    ) where
+module TTT where
 
-import Control.Lens
-import Data.List.Split ( chunksOf )
+import Control.Lens hiding ((<|))
+import Data.List.Split (chunksOf)
+import Data.List.NonEmpty (NonEmpty((:|)),(<|))
+import qualified Data.List.NonEmpty as N
 
 import Game
 
-type Sq = Either Int Player
-type Board = [Sq]
+opp :: (Eq a, Enum a, Bounded a) => a -> a
+opp = succPlayer
 
-data TTT = TTT
-    { _gPlayer :: Player
-    , _gStatus :: Status
-    , _gMoves  :: [Int]
-    , _gBoard  :: Board
+type Sq    p = Either Int p
+type Board p = [Sq p]
+
+data TTT p = TTT
+    { _gPlayer :: p
+    , _gStatus :: Status p
+    , _gMoves  :: NonEmpty Int
+    , _gBoard  :: Board p
     } deriving Show
 makeLenses ''TTT
 
-instance Game TTT where
-    type Move TTT = Int
-    gamePlayer = _gPlayer
-    gameStatus = _gStatus
-    nextGames = tttNext
-    lastMove g = case _gMoves g of [] -> Nothing; m:_ -> Just m
+initTTT :: Bounded p => TTT p
+initTTT = TTT minBound Play (0:|[]) $ Left <$> [1..9]
 
-showPlayer P1 = "X"
-showPlayer P2 = "O"
+showPlayer p = ["ABCDE" !! fromEnum p]
 
 showStatus Play = "Game is in play."
 showStatus Draw = "Game is a draw."
 showStatus (Win p) = showPlayer p <> " has won."
 
+showSq :: Enum p => Sq p -> String
 showSq = either show showPlayer
 
 showTTT TTT{..} =
@@ -43,13 +41,14 @@ showTTT TTT{..} =
       [ " " <> showSq sq <> " " | sq <- row ]
       | row <- chunksOf 3 _gBoard ]
     <>
-    [ "Moves: " <> intercalate ", " (reverse $ show <$> _gMoves) ]
+    [ "Moves: " <> intercalate ", " (reverse $ show <$> N.toList _gMoves) ]
     <>
     [ if _gStatus == Play
       then showPlayer _gPlayer <> " to move."
       else showStatus _gStatus ]
 
-initTTT = TTT P1 Play [] $ Left <$> [1..9]
+putTTT :: (Eq p, Enum p) => TTT p -> IO ()
+putTTT = traverse_ putStrLn . showTTT
 
 parseTTT = readMaybe @Int
 
@@ -65,8 +64,30 @@ update g@TTT{..}
     diag = chunksOf 3 $ (_gBoard!!) <$> [0,4,8,2,4,6]
 
 tttNext g@TTT{..} = if _gStatus /= Play then [] else
-    [ g & update . over gMoves (m:) . set gBoard board
+    [ g & update . over gMoves (m<|) . set gBoard board
     | m <- lefts _gBoard
     , let (aa,_:bb) = splitAt (m-1) _gBoard
     , let board = aa <> [Right _gPlayer] <> bb
     ]
+
+tttLastMove = N.head . _gMoves
+
+playTTT g@TTT{..} = do
+    putTTT g
+    case tttNext g of [] -> pure _gStatus; gg -> loop gg
+  where
+    loop gg = do
+        l <- getLine
+        case readMaybe @Int l >>= \m -> find ((==m).tttLastMove) gg of
+            Nothing -> putStrLn "invalid move" >> loop gg
+            Just g' -> playTTT g'
+
+-- ----------------------------------------------------------------------
+
+instance (Eq p, Enum p, Bounded p) => Game (TTT p) where
+    type Player (TTT p) = p
+    type Move   (TTT p) = Int
+    gamePlayer = _gPlayer
+    gameStatus = _gStatus
+    nextGames  = tttNext
+    lastMove   = tttLastMove
