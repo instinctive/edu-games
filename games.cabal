@@ -41,9 +41,14 @@ common shared -- {{{
 
 library
   import: shared
-  hs-source-dirs: src, src/game, src/mct, src/ttt
+  hs-source-dirs: src, src/game, src/mct, src/ttt, src/total
   exposed-modules: Quux
-  other-modules: Game, MCT, TTT
+  other-modules: Game, MCT, TTT, Total
+
+library total
+  import: shared
+  hs-source-dirs: src/total
+  exposed-modules: Total
 
 library game
   import: shared
