@@ -1,0 +1,64 @@
+cabal-version: 3.0
+name: games
+version: 0.1.0.0
+
+common shared -- {{{
+  mixins:
+    , base hiding (Prelude)
+    , base-prelude (BasePrelude as Prelude)
+  default-language: GHC2021
+  include-dirs: include
+  default-extensions:
+    , BlockArguments
+    , CPP
+    , DataKinds
+    , LambdaCase
+    , MultiWayIf
+    , RecordWildCards
+    , TypeFamilies
+    , ViewPatterns
+  -- ghc-options: -pgmL markdown-unlit
+  ghc-options: -O2
+  build-depends: base, base-prelude
+    , MonadRandom
+    , ansi-terminal
+    , array
+    , containers
+    , extra
+    , lens
+    , linear
+    , llrbtree
+    , mtl
+    , pcre-heavy
+    , random
+    , random-shuffle
+    , split
+    , tagged
+    , text
+    , unix
+
+-- }}}
+
+library game
+  import: shared
+  hs-source-dirs: src/game
+  exposed-modules: Game
+
+library mct
+  import: shared
+  hs-source-dirs: src/mct
+  exposed-modules: MCT
+  build-depends: game
+
+library ttt
+  import: shared
+  hs-source-dirs: src/ttt
+  exposed-modules: TTT
+  build-depends: game
+
+library quux
+  import: shared
+  hs-source-dirs: src
+  exposed-modules: Quux
+  build-depends: game, mct, ttt
+
