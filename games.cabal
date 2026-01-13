@@ -39,6 +39,12 @@ common shared -- {{{
 
 -- }}}
 
+library
+  import: shared
+  hs-source-dirs: src, src/game, src/mct, src/ttt
+  exposed-modules: Quux
+  other-modules: Game, MCT, TTT
+
 library game
   import: shared
   hs-source-dirs: src/game
@@ -55,10 +61,3 @@ library ttt
   hs-source-dirs: src/ttt
   exposed-modules: TTT
   build-depends: game
-
-library quux
-  import: shared
-  hs-source-dirs: src
-  exposed-modules: Quux
-  build-depends: game, mct, ttt
-
