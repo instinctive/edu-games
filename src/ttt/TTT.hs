@@ -9,7 +9,7 @@ import qualified Data.List.NonEmpty as N
 
 import Game
 
-opp :: (Eq a, Enum a, Bounded a) => a -> a
+opp :: PlayerId a => a -> a
 opp = succPlayer
 
 type Sq    p = Either Int p
@@ -84,7 +84,7 @@ playTTT g@TTT{..} = do
 
 -- ----------------------------------------------------------------------
 
-instance (Eq p, Enum p, Bounded p) => Game (TTT p) where
+instance PlayerId p => Game (TTT p) where
     type Player (TTT p) = p
     type Move   (TTT p) = Int
     gamePlayer = _gPlayer

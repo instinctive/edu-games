@@ -1,41 +1,41 @@
+{-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 module MCT where
 
 import Control.Lens
 import Control.Monad.Random.Class
-import Data.Array.Unboxed
-import System.Random ( split )
 
+import Total
 import Game
 
-data Tree a = Tree a [Tree a] deriving (Show, Functor)
+-- #define ENUM(a) Eq a, Ord a, Bounded a, Enum a, Ix a, Show a
 
-mkTree :: (a -> [a]) -> a -> Tree a
-mkTree f a = Tree a (mkTree f <$> f a)
+type Reward g = UArray (Player g) Double
 
-splitGens g = let (a,b) = split g in a : splitGens b
+data MCT g = MCT
+    { _mctMove    :: Move g
+    , _mctWins    :: Reward g
+    , _mctPlays   :: Double
+    , _mctPlayed  :: [MCT g]
+    , _mctWaiting :: [g]
+    }
+makeLenses ''MCT
 
-annoRandom g (Tree a tt) =
-    Tree (g',a) (zipWith annoRandom gg tt)
-  where
-    g':gg = splitGens g
+deriving instance (Show g, Show (Move g), Show (Player g), Ix (Player g)) => Show (MCT g)
 
-data MCT p = MCT
-    { _mctWins  :: UArray p Int
-    , _mctPlays :: Int
-    } deriving Show
-
-mctWins :: Ix p => p -> Lens' (MCT p) Int
-mctWins p f mct = f (_mctWins mct ! p) <&> \wins -> mct { _mctWins = _mctWins mct // [(p,wins)] }
-
-mctPlays :: Lens' (MCT p) Int
-mctPlays f mct = f (_mctPlays mct) <&> \plays -> mct { _mctPlays = plays }
-
-pickOne :: MonadRandom m => [a] -> m a
 pickOne l = getRandomR (0, length l - 1) <&> (l!!)
 
-rollout g
-    | gameStatus g == Play = pickOne (nextGames g) >>= rollout
-    | otherwise = pure g
+rollout (g :: g) = case gameStatus g of
+    Play  -> pickOne (nextGames g) >>= rollout
+    Draw  -> pure $ totalArray (const $ 1 / fromIntegral (numPlayers @(Player g)))
+    Win p -> pure $ totalArray (const 0) & set (totalAt p) 1
 
-rolloutTree (Tree g []) = pure g
-rolloutTree (Tree _ tt) = pickOne tt >>= rolloutTree
+expand g = rollout g <&> \reward ->
+    (reward, MCT
+        { _mctMove = lastMove g
+        , _mctWins = reward
+        , _mctPlays = 1
+        , _mctPlayed = []
+        , _mctWaiting = nextGames g
+        })
