@@ -5,31 +5,23 @@
 module MCT where
 
 import Control.Lens
+import Data.Tree
+
 import Control.Monad.Random  ( evalRand, runRand, getRandomR )
 import System.Random         ( StdGen, newStdGen, split )
 import System.Random.Shuffle ( shuffleM )
-
-import qualified Data.Tree as DTree
 
 import Total
 import Game
 import qualified TTT
 
--- #define ENUM(a) Eq a, Ord a, Bounded a, Enum a, Ix a, Show a
+prune 0 (Node a _) = Node a []
+prune n (Node a tt) = Node a (prune (n-1) <$> tt)
 
-data Tree a = Tree a [Tree a] deriving Functor
-deriving instance Show a => Show (Tree a)
+gameTree g = Node g (gameTree <$> nextGames g)
 
-drawTree = DTree.drawTree . cvt where
-    cvt (Tree a tt) = DTree.Node a (cvt <$> tt)
-
-prune 0 (Tree a _) = Tree a []
-prune n (Tree a tt) = Tree a (prune (n-1) <$> tt)
-
-gameTree g = Tree g (gameTree <$> nextGames g)
-
-randomize rnd (Tree a tt) =
-    Tree (a,r) (zipWith randomize rr tt')
+randomize rnd (Node a tt) =
+    Node (a,r) (zipWith randomize rr tt')
   where
     r:rr = splitGens rnd
     (tt',r') = runRand (shuffleM tt) r
@@ -67,22 +59,22 @@ type SearchTree g = Tree (Either (MCT g) (g,StdGen))
 
 search :: (Game g, PlayerId (Player g)) => SearchTree g -> (Reward g, SearchTree g)
 
-search (Tree (Right (g,gen)) tt) =
-    (reward, Tree (Left m) tt)
+search (Node (Right (g,gen)) tt) =
+    (reward, Node (Left m) tt)
   where
     (reward,m) = evalRand (expand g) gen
 
-search (Tree (Left m) tt)
+search (Node (Left m) tt)
     | null tt   = error "search reached terminal node"
     | null rr   = selection
     | otherwise = expansion ll t rr'
   where
-    isLeftTree (Tree a _) = isLeft a
+    isLeftTree (Node a _) = isLeft a
     (ll,rr@(~(t:rr'))) = span isLeftTree tt
     param     = sqrt 2
     player    = m ^. mctPlayer
     logParent = m ^. mctPlays . to log
-    eval (Tree (Left child) _) = exploit + param * explore where
+    eval (Node (Left child) _) = exploit + param * explore where
         exploit = child ^. mctRewards . totalAt player / child ^. mctPlays
         explore = sqrt (logParent / child ^. mctPlays)
     selection =
@@ -95,11 +87,11 @@ search (Tree (Left m) tt)
     expansion aa u bb =
         let (reward,v) = search u in
         let m' = m & over mctPlays (+1) . over mctRewards (addReward reward) in
-        (reward, Tree (Left m') (aa <> [v] <> bb))
+        (reward, Node (Left m') (aa <> [v] <> bb))
     addReward aa bb =
         totalArray $ zipWith (+) (elems aa) (elems bb)
 
-treeItem (Tree x _) = either Left (Right . fst) x
+treeItem (Node x _) = either Left (Right . fst) x
 
 pp (Right _) = "Game"
 pp (Left MCT{..}) = show _mctPlayer <> " " <> show _mctMove <> " " <> show (_mctPlays, elems _mctRewards)
