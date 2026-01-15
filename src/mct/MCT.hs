@@ -5,6 +5,8 @@
 module MCT where
 
 import Control.Lens
+import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty qualified as NE
 import Data.Tree
 import Data.Tree.Lens
 
@@ -14,7 +16,6 @@ import System.Random.Shuffle ( shuffleM )
 
 import Total
 import Game
-import qualified TTT
 
 prune 0 (Node a _) = Node a []
 prune n (Node a tt) = Node a (prune (n-1) <$> tt)
@@ -31,10 +32,9 @@ randomize rnd (Node a tt) =
 type Reward g = UArray (Player g) Double
 
 data MCT g = MCT
-    { _mctPlayer  :: Player g -- who made the move leading to this position
-    , _mctMove    :: Move g   -- what was that move
-    , _mctPlays   :: Double   -- how many playouts from this position
-    , _mctRewards :: Reward g -- what have been the rewards
+    { _mctGame   :: g        -- current position
+    , _mctVisits :: Double   -- how many playouts from this position
+    , _mctReward :: Reward g -- what have been the rewards
     }
 makeLenses ''MCT
 
@@ -49,10 +49,9 @@ rollout (g::g,gen) = ap (,) mct $ evalRand (go g) gen where
         Win p -> pure $ totalArray (repeat 0) & set (totalAt p) 1
     draw = 1 / fromIntegral (numPlayers @(Player g))
     mct reward = MCT
-        { _mctPlayer  = gamePlayer g
-        , _mctMove    = lastMove g
-        , _mctPlays   = 1
-        , _mctRewards = reward
+        { _mctGame   = g
+        , _mctVisits = 1
+        , _mctReward = reward
         }
 
 type SearchTree g = Tree (Either (MCT g) (g,StdGen))
@@ -68,17 +67,17 @@ search node@(Node (Left m) tt)
     | otherwise = expansion ll t rr'
   where
     terminal =
-        let plays = m ^. mctPlays in
-        let reward = totalArray (m ^. mctRewards . to elems . to (map (/plays))) in
-        (reward, node & over (root._Left) (over mctPlays (+1) . over mctRewards (addReward reward)))
+        let plays = m ^. mctVisits in
+        let reward = totalArray (m ^. mctReward . to elems . to (map (/plays))) in
+        (reward, node & over (root._Left) (over mctVisits (+1) . over mctReward (addReward reward)))
     isLeftTree (Node a _) = isLeft a
     (ll,rr@(~(t:rr'))) = span isLeftTree tt
     param     = sqrt 2
-    player    = m ^. mctPlayer
-    logParent = m ^. mctPlays . to log
+    player    = m ^. mctGame . to gamePlayer
+    logParent = m ^. mctVisits . to log
     eval (Node (Left child) _) = exploit + param * explore where
-        exploit = child ^. mctRewards . totalAt player / child ^. mctPlays
-        explore = sqrt (logParent / child ^. mctPlays)
+        exploit = child ^. mctReward . totalAt player / child ^. mctVisits
+        explore = sqrt (logParent / child ^. mctVisits)
     selection =
         -- traceShow ("select best move for", player)
         let vv = eval <$> tt in
@@ -88,15 +87,19 @@ search node@(Node (Left m) tt)
         expansion aa u bb
     expansion aa u bb =
         let (reward,v) = search u in
-        let m' = m & over mctPlays (+1) . over mctRewards (addReward reward) in
+        let m' = m & over mctVisits (+1) . over mctReward (addReward reward) in
         (reward, Node (Left m') (aa <> [v] <> bb))
     addReward aa bb =
         totalArray $ zipWith (+) (elems aa) (elems bb)
 
 treeItem (Node x _) = either Left (Right . fst) x
 
-pp (Right _) = "Game"
-pp (Left MCT{..}) = show _mctPlayer <> " " <> show _mctMove <> " " <> show (_mctPlays, pct _mctPlays <$> elems _mctRewards)
+pp (Right (g,_)) = showGame g
+pp (Left MCT{..}) =
+    show (_mctVisits, pct _mctVisits <$> elems _mctReward)
+    <> " " <> showGame _mctGame
+
+showGame g = show (gamePlayer g) <> " " <> show (NE.toList $ gameMoves g)
 
 pct d n = round $ 100 * n / d
 
