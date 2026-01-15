@@ -20,8 +20,8 @@ totalAt i f a =
     let n = unsafeIndex (minBound,maxBound) i in
     f (unsafeAt a n) <&> \e -> unsafeReplace a [(n,e)]
 
-totalArray :: TOTAL a i e => (i -> e) -> a i e
-totalArray f = listArray (minBound, maxBound) $ f <$> [minBound..maxBound]
+totalArray :: TOTAL a i e => [e] -> a i e
+totalArray ee = listArray (minBound, maxBound) ee
 
 (!) :: TOTAL a i e => a i e -> i -> e
 (!) a i = unsafeAt a (unsafeIndex (minBound,maxBound) i)

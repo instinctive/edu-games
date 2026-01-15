@@ -59,10 +59,17 @@ library mct
   import: shared
   hs-source-dirs: src/mct
   exposed-modules: MCT
-  build-depends: game
+  build-depends: game, total
 
 library ttt
   import: shared
   hs-source-dirs: src/ttt
   exposed-modules: TTT
   build-depends: game
+
+executable mctest
+  import: shared
+  main-is: mct.hs
+  hs-source-dirs: app
+  build-depends: games
+

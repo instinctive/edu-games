@@ -12,7 +12,7 @@ data P4 = P4a | P4b | P4c | P4d       deriving (ENUM)
 data P5 = P5a | P5b | P5c | P5d | P5e deriving (ENUM)
 #undef ENUM
 
-class (Eq a, Bounded a, Enum a) => PlayerId a where
+class (Eq a, Bounded a, Enum a, Ix a, Show a) => PlayerId a where
     numPlayers :: Int
     numPlayers = fromEnum (maxBound @a) - fromEnum (minBound @a) + 1
     succPlayer :: a -> a
