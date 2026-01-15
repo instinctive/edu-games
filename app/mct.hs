@@ -4,4 +4,4 @@ import Quux
 
 main = do
     [n,p] <- getArgs <&> map (read @Int)
-    mctSearch (initTTT :: TTT P2) n p
+    mctTest (initTTT :: TTT P2) n p

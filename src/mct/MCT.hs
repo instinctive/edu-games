@@ -103,11 +103,27 @@ showGame g = show (gamePlayer g) <> " " <> show (NE.toList $ gameMoves g)
 
 pct d n = round $ 100 * n / d
 
-mctSearch g n p = do
+mctSearchTree n g = do
     gen <- newStdGen
     let t = fmap Right . randomize gen $ gameTree g
-    let go t = snd $ search t
-    let t' = iterate go t !! n
-    let trim = unlines . filter (not.(isInfixOf "Game")) . filter (any isAlpha) . lines
-    let prt = putStrLn . trim . drawTree . fmap pp . prune p
-    prt t'
+    pure $ iterate go t !! n
+  where
+    go t = snd $ search t
+
+mctSearch n g = mctSearchTree n g <&> bestMove
+
+bestMove (Node (Right _) _) = error "unsearched node"
+bestMove (Node _ tt)
+    | null cands = error "no children"
+    | otherwise = lastMove $ maximumBy (comparing _mctVisits) cands
+  where
+    cands = lefts (view root <$> tt)
+
+lastMove :: Game g => MCT g -> Move g
+lastMove = NE.head . gameMoves . _mctGame
+
+mctTest g n p =
+    mctSearchTree n g >>= out
+  where
+    out = traverse_ putStrLn . trim . lines . drawTree . fmap pp . prune p
+    trim = filter (any isAlpha)
