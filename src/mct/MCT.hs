@@ -6,6 +6,7 @@ module MCT where
 
 import Control.Lens
 import Data.Tree
+import Data.Tree.Lens
 
 import Control.Monad.Random  ( evalRand, runRand, getRandomR )
 import System.Random         ( StdGen, newStdGen, split )
@@ -41,34 +42,35 @@ deriving instance (Show g, Show (Move g), Show (Player g), Ix (Player g)) => Sho
 
 pickOne l = getRandomR (0, length l - 1) <&> (l!!)
 
-rollout (g :: g) = case gameStatus g of
-    Play  -> pickOne (nextGames g) >>= rollout
-    Draw  -> pure $ totalArray (repeat draw)
-    Win p -> pure $ totalArray (repeat 0) & set (totalAt p) 1
-  where draw = 1 / fromIntegral (numPlayers @(Player g))
-
-expand g = rollout g <&> \reward ->
-    (reward, MCT
+rollout (g::g,gen) = ap (,) mct $ evalRand (go g) gen where
+    go g = case gameStatus g of
+        Play  -> pickOne (nextGames g) >>= go
+        Draw  -> pure $ totalArray (repeat draw)
+        Win p -> pure $ totalArray (repeat 0) & set (totalAt p) 1
+    draw = 1 / fromIntegral (numPlayers @(Player g))
+    mct reward = MCT
         { _mctPlayer  = gamePlayer g
         , _mctMove    = lastMove g
         , _mctPlays   = 1
         , _mctRewards = reward
-        })
+        }
 
 type SearchTree g = Tree (Either (MCT g) (g,StdGen))
 
 search :: (Game g, PlayerId (Player g)) => SearchTree g -> (Reward g, SearchTree g)
 
-search (Node (Right (g,gen)) tt) =
-    (reward, Node (Left m) tt)
-  where
-    (reward,m) = evalRand (expand g) gen
+search node@(Node (Right ggen) tt) =
+    rollout ggen <&> \m -> set root (Left m) node
 
-search (Node (Left m) tt)
-    | null tt   = error "search reached terminal node"
+search node@(Node (Left m) tt)
+    | null tt   = terminal
     | null rr   = selection
     | otherwise = expansion ll t rr'
   where
+    terminal =
+        let plays = m ^. mctPlays in
+        let reward = totalArray (m ^. mctRewards . to elems . to (map (/plays))) in
+        (reward, node & over (root._Left) (over mctPlays (+1) . over mctRewards (addReward reward)))
     isLeftTree (Node a _) = isLeft a
     (ll,rr@(~(t:rr'))) = span isLeftTree tt
     param     = sqrt 2
@@ -94,13 +96,15 @@ search (Node (Left m) tt)
 treeItem (Node x _) = either Left (Right . fst) x
 
 pp (Right _) = "Game"
-pp (Left MCT{..}) = show _mctPlayer <> " " <> show _mctMove <> " " <> show (_mctPlays, elems _mctRewards)
+pp (Left MCT{..}) = show _mctPlayer <> " " <> show _mctMove <> " " <> show (_mctPlays, pct _mctPlays <$> elems _mctRewards)
 
-mctSearch g n = do
+pct d n = round $ 100 * n / d
+
+mctSearch g n p = do
     gen <- newStdGen
     let t = fmap Right . randomize gen $ gameTree g
     let go t = snd $ search t
     let t' = iterate go t !! n
     let trim = unlines . filter (not.(isInfixOf "Game")) . filter (any isAlpha) . lines
-    let prt = putStrLn . trim . drawTree . fmap pp . prune 4
+    let prt = putStrLn . trim . drawTree . fmap pp . prune p
     prt t'
