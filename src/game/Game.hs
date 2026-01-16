@@ -23,14 +23,16 @@ data P4 = P4a | P4b | P4c | P4d       deriving (PLAYERID) -- ^ 4 Players
 data P5 = P5a | P5b | P5c | P5d | P5e deriving (PLAYERID) -- ^ 5 Players
 #undef PLAYERID
 
--- | Game status.
-data Status p = Play | Draw | Win p deriving (Eq,Ord,Show)
+-- | Game result.
+data Result p = Draw | Win p deriving (Eq,Ord,Show)
 
 -- | Game class.
 class Game g where
-    type Player g :: Type                -- ^ Player type for this game
-    type Move   g :: Type                -- ^ Move type for this game
-    gameStatus :: g -> Status (Player g) -- ^ Status of this position
-    gamePlayer :: g -> Player g          -- ^ Who has the next move
-    gameMoves  :: g -> NonEmpty (Move g) -- ^ Moves that led to this position
-    nextGames  :: g -> [g]               -- ^ Possible next positions
+    type Player g :: Type
+    type Move   g :: Type
+    gameStatus :: g -> Maybe (Result (Player g))
+    gamePlayer :: g -> Player g
+    gameMoves  :: g -> NonEmpty (Move g)
+    nextGames  :: g -> [g]
+
+type GAME g = (Game g, PlayerId (Player g))

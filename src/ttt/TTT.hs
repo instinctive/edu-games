@@ -17,20 +17,19 @@ type Board p = [Sq p]
 
 data TTT p = TTT
     { _gPlayer :: p
-    , _gStatus :: Status p
+    , _gStatus :: Maybe (Result p)
     , _gMoves  :: NonEmpty Int
     , _gBoard  :: Board p
     } deriving Show
 makeLenses ''TTT
 
 initTTT :: Bounded p => TTT p
-initTTT = TTT minBound Play (0:|[]) $ Left <$> [1..9]
+initTTT = TTT minBound Nothing (0:|[]) $ Left <$> [1..9]
 
 showPlayer p = ["ABCDE" !! fromEnum p]
 
-showStatus Play = "Game is in play."
-showStatus Draw = "Game is a draw."
-showStatus (Win p) = showPlayer p <> " has won."
+showResult Draw = "Game is a draw."
+showResult (Win p) = showPlayer p <> " has won."
 
 showSq :: Enum p => Sq p -> String
 showSq = either show showPlayer
@@ -43,9 +42,9 @@ showTTT TTT{..} =
     <>
     [ "Moves: " <> intercalate ", " (reverse $ show <$> N.toList _gMoves) ]
     <>
-    [ if _gStatus == Play
-      then showPlayer _gPlayer <> " to move."
-      else showStatus _gStatus ]
+    [ _gStatus & maybe
+      (showPlayer _gPlayer <> " to move.")
+      showResult ]
 
 putTTT :: (Eq p, Enum p) => TTT p -> IO ()
 putTTT = traverse_ putStrLn . showTTT
@@ -53,8 +52,8 @@ putTTT = traverse_ putStrLn . showTTT
 parseTTT = readMaybe @Int
 
 update g@TTT{..}
-    | isWin     = g & over gPlayer opp . set gStatus (Win _gPlayer)
-    | isDraw    = g & over gPlayer opp . set gStatus Draw
+    | isWin     = g & over gPlayer opp . set gStatus (Just $ Win _gPlayer)
+    | isDraw    = g & over gPlayer opp . set gStatus (Just Draw)
     | otherwise = g & over gPlayer opp
   where
     isDraw = all isRight _gBoard
@@ -63,7 +62,7 @@ update g@TTT{..}
     cols = transpose rows
     diag = chunksOf 3 $ (_gBoard!!) <$> [0,4,8,2,4,6]
 
-tttNext g@TTT{..} = if _gStatus /= Play then [] else
+tttNext g@TTT{..} = _gStatus & flip maybe (const [])
     [ g & update . over gMoves (m<|) . set gBoard board
     | m <- lefts _gBoard
     , let (aa,_:bb) = splitAt (m-1) _gBoard
