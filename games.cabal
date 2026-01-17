@@ -41,9 +41,9 @@ common shared -- {{{
 
 library
   import: shared
-  hs-source-dirs: src, src/game, src/mct, src/ttt, src/total
+  hs-source-dirs: src, src/game, src/mct, src/ttt, src/chess
   exposed-modules: Quux
-  other-modules: Game, MCT, TTT, Total
+  other-modules: Game, MCT, TTT, Chess
 
 library total
   import: shared
@@ -59,9 +59,15 @@ library mct
   import: shared
   hs-source-dirs: src/mct
   exposed-modules: MCT
-  build-depends: game, total
+  build-depends: game
 
 library ttt
+  import: shared
+  hs-source-dirs: src/ttt
+  exposed-modules: TTT
+  build-depends: game
+
+library chess
   import: shared
   hs-source-dirs: src/ttt
   exposed-modules: TTT
