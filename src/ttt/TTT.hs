@@ -16,9 +16,9 @@ type Sq    p = Either Int p
 type Board p = [Sq p]
 
 data TTT p = TTT
-    { _gPlayer :: p
-    , _gStatus :: Maybe (Result p)
-    , _gMoves  :: NonEmpty Int
+    { _gPlayer :: !p
+    , _gStatus :: !(Maybe (Result p))
+    , _gMoves  :: !(NonEmpty Int)
     , _gBoard  :: Board p
     } deriving Show
 makeLenses ''TTT
