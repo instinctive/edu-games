@@ -11,8 +11,8 @@ import Game
 
 data MCT g = MCT
     { _mctGame   :: g
-    , _mctScore  :: Double
-    , _mctVisits :: Double
+    , _mctScore  :: !Double
+    , _mctVisits :: !Double
     }
 makeLenses ''MCT
 
@@ -61,9 +61,16 @@ search player node@(Node m@MCT{..} tt) = case gameStatus _mctGame of
 
 mctSearch player = fmap snd . search player
 
+mctSearchN player n t = go n t where
+    go 0 t = pure t
+    go n t = mctSearch player t >>= go (n-1)
+
 bestMove (Node _ tt) =
     maximumBy (comparing _mctVisits) (rootLabel <$> tt)
     & NE.head . gameMoves . _mctGame
+
+findMove (Node _ tt) m =
+    find ((==m).NE.head.gameMoves._mctGame.rootLabel) tt
 
 pp MCT{..} =
     [ show $ NE.head $ gameMoves _mctGame
