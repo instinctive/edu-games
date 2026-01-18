@@ -1,55 +1,43 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module TTT where
+module TTT
+    ( TTT
+    , initTTT
+    ) where
 
 import Control.Lens hiding ((<|))
 import Data.List.Split (chunksOf)
 import Data.List.NonEmpty (NonEmpty((:|)),(<|))
 import qualified Data.List.NonEmpty as N
 
-import Game
+import Game ( Game, Result(..) )
+import Game qualified as G
 
-opp :: PlayerId a => a -> a
-opp = succPlayer
+data Player = X | O deriving (Eq,Ord,Bounded,Enum,Ix,Show)
 
-type Sq    p = Either Int p
-type Board p = [Sq p]
+opp X = O
+opp O = X
 
-data TTT p = TTT
-    { _gPlayer :: !p
-    , _gStatus :: !(Maybe (Result p))
+type Sq    = Either Int Player
+type Board = [Sq]
+
+data TTT = TTT
+    { _gPlayer :: !Player
+    , _gStatus :: !(Maybe (Result Player))
     , _gMoves  :: !(NonEmpty Int)
-    , _gBoard  :: Board p
+    , _gBoard  :: Board
     } deriving Show
 makeLenses ''TTT
 
-initTTT :: Bounded p => TTT p
-initTTT = TTT minBound Nothing (0:|[]) $ Left <$> [1..9]
+instance Game TTT where
+    type Player TTT = Player
+    type Move   TTT = Int
+    gameStatus = _gStatus
+    gamePlayer = _gPlayer
+    gameMoves  = _gMoves
+    nextGames  = tttNext
 
-showPlayer p = ["ABCDE" !! fromEnum p]
-
-showResult Draw = "Game is a draw."
-showResult (Win p) = showPlayer p <> " has won."
-
-showSq :: Enum p => Sq p -> String
-showSq = either show showPlayer
-
-showTTT TTT{..} =
-    intersperse "---+---+---"
-    [ intercalate "|"
-      [ " " <> showSq sq <> " " | sq <- row ]
-      | row <- chunksOf 3 _gBoard ]
-    <>
-    [ "Moves: " <> intercalate ", " (reverse $ show <$> N.toList _gMoves) ]
-    <>
-    [ _gStatus & maybe
-      (showPlayer _gPlayer <> " to move.")
-      showResult ]
-
-putTTT :: (Eq p, Enum p) => TTT p -> IO ()
-putTTT = traverse_ putStrLn . showTTT
-
-parseTTT = readMaybe @Int
+initTTT = TTT X Nothing (0:|[]) $ Left <$> [1..9]
 
 update g@TTT{..}
     | isWin     = g & over gPlayer opp . set gStatus (Just $ Win _gPlayer)
@@ -81,12 +69,25 @@ playTTT g@TTT{..} = do
             Nothing -> putStrLn "invalid move" >> loop gg
             Just g' -> playTTT g'
 
--- ----------------------------------------------------------------------
+-- Text interface
 
-instance PlayerId p => Game (TTT p) where
-    type Player (TTT p) = p
-    type Move   (TTT p) = Int
-    gameStatus = _gStatus
-    gamePlayer = _gPlayer
-    gameMoves  = _gMoves
-    nextGames  = tttNext
+showResult Draw = "Game is a draw."
+showResult (Win p) = show p <> " has won."
+
+showSq = either show show
+
+showTTT TTT{..} =
+    intersperse "---+---+---"
+    [ intercalate "|"
+      [ " " <> showSq sq <> " " | sq <- row ]
+      | row <- chunksOf 3 _gBoard ]
+    <>
+    [ "Moves: " <> intercalate ", " (reverse $ show <$> N.toList _gMoves) ]
+    <>
+    [ _gStatus & maybe
+      (show _gPlayer <> " to move.")
+      showResult ]
+
+putTTT = traverse_ putStrLn . showTTT
+
+parseTTT = readMaybe @Int

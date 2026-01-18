@@ -1,4 +1,5 @@
-{-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE TemplateHaskell     #-}
 
 module MCT where
 
@@ -8,6 +9,8 @@ import Data.List.NonEmpty qualified as NE
 import Data.Tree
 
 import Game
+
+class Game a => MCTS a where drawValue :: Double
 
 data MCT g = MCT
     { _mctGame   :: g
@@ -21,12 +24,13 @@ initMCT g = MCT g 0 0
 mkTree g = initMCT <$> tree g where
     tree  = ap Node (map tree . nextGames)
 
-addResult player r (m :: MCT g) = m
+addResult player r (m::MCT g) = m
     & over mctScore (+score)
     . over mctVisits (+1)
   where
+    score :: Double
     score = case r of
-        Draw  -> drawValue @(Player g)
+        Draw  -> drawValue @g
         Win p -> bool 0 1 $ p == player
 
 data Child = Select Double | Expand deriving (Eq,Ord,Show)

@@ -7,11 +7,10 @@ module Chess
 
 import Data.Text ( Text )
 
-import Game ( Game, PlayerId, Result )
+import Game ( Game, Result )
 import Game qualified as G
 
 data Color = White | Black deriving (Eq,Ord,Bounded,Enum,Ix,Show)
-instance PlayerId Color where numPlayers = 2; drawValue = 0.5
 
 type Move = Text
 
