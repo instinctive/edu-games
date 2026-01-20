@@ -52,7 +52,7 @@ explore (log -> logParent) MCTSNode{..} = do
     let i = fst $ maximumBy (comparing snd) $ zip [0..] vv
     search (Just $ gamePlayer _mGame) (ary!i)
 
-data Value a = Select a | Expand deriving (Eq,Ord,Show)
+data Value a = Select !Double | Expand deriving (Eq,Ord,Show)
 
 eval logParent (MCTSNode{..} :: MCTSNode g) = do
     total <- readTVar _mTotal
@@ -80,7 +80,7 @@ mctTest g n = do
   where
     getMove MCTSNode{..} = do
         total <- readTVar _mTotal
-        if total == 0 then pure Expand else do
+        if total == 0 then pure Nothing else do
             value <- readTVar _mValue
             let move :| _ = gameMoves _mGame
-            pure $ Select (move, value, total)
+            pure $ Just (move, value, total)
