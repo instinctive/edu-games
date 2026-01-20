@@ -9,6 +9,12 @@ import Data.Array
 
 import Game
 
+-- | How many rollouts a node must have before being expanded.
+kExpand  = 2 :: Double
+
+-- | The exploit vs explore parameter from the UCB1 formula.
+kExplore = sqrt 2 :: Double
+
 data MCTSNode g = MCTSNode
     { _mGame     :: g
     , _mValue    :: TVar Double
@@ -24,7 +30,7 @@ initMCTS g = MCTSNode g
 incrTotal MCTSNode{..} = atomically $ do
     t <- readTVar _mTotal
     writeTVar _mTotal (t+1)
-    when (t == 0 && gameStatus _mGame == Nothing) do
+    when (t == kExpand && gameStatus _mGame == Nothing) do
         mm <- traverse initMCTS (gameChildren _mGame)
         let ary = listArray (0, length mm - 1) mm
         writeTVar _mChildren ary
@@ -34,7 +40,7 @@ search player node@MCTSNode{..} = do
     total <- incrTotal node
     case gameStatus _mGame of
         Just r -> update r
-        Nothing | total == 0 -> rollout _mGame >>= update
+        Nothing | total < kExpand -> rollout _mGame >>= update
         Nothing -> explore total node >>= update
   where
     update r = player & maybe (pure r) (addValue r . resultValue r)
@@ -58,9 +64,7 @@ eval logParent (MCTSNode{..} :: MCTSNode g) = do
         value <- readTVar _mValue
         let exploit = value / total
         let explore = logParent / total
-        pure . Select $ exploit + param * explore
-  where
-    param = sqrt 2
+        pure . Select $ exploit + kExplore * explore
 
 rollout g = gameStatus g & maybe next pure where
     next = pickOne (gameChildren g) >>= rollout
