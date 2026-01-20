@@ -1,98 +1,86 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE TemplateHaskell     #-}
 
 module MCT where
 
-import Control.Lens
-import Control.Monad.Random.Class ( MonadRandom, getRandomR )
-import Data.List.NonEmpty qualified as NE
-import Data.Tree
+import Control.Concurrent.STM
+import Control.Monad.Random.Class ( getRandomR )
+import Data.Array
 
 import Game
 
-class Game a => MCTS a where drawValue :: Double
+-- class (Game g, Eq (Player g)) => MCTS g where drawValue :: Double
 
-data MCT g = MCT
-    { _mctGame   :: g
-    , _mctScore  :: !Double
-    , _mctVisits :: !Double
+data MCTSNode g = MCTSNode
+    { _mGame     :: g
+    , _mValue    :: TVar Double
+    , _mTotal    :: TVar Double
+    , _mChildren :: TVar (Array Int (MCTSNode g))
     }
-makeLenses ''MCT
 
-initMCT g = MCT g 0 0
+initMCTS g = MCTSNode g
+    <$> newTVar 0
+    <*> newTVar 0
+    <*> newTVar undefined
 
-mkTree g = initMCT <$> tree g where
-    tree  = ap Node (map tree . nextGames)
+incrTotal MCTSNode{..} = atomically $ do
+    t <- readTVar _mTotal
+    writeTVar _mTotal (t+1)
+    when (t == 0 && gameStatus _mGame == Nothing) do
+        mm <- traverse initMCTS (nextGames _mGame)
+        let ary = listArray (0, length mm - 1) mm
+        writeTVar _mChildren ary
+    pure t
 
-addResult player r (m::MCT g) = m
-    & over mctScore (+score)
-    . over mctVisits (+1)
+search player node@(MCTSNode{..} :: MCTSNode g) = do
+    total <- incrTotal node
+    case gameStatus _mGame of
+        Just r -> update r
+        Nothing | total == 0 -> rollout _mGame >>= update
+        Nothing -> explore total node >>= update
   where
-    score :: Double
-    score = case r of
-        Draw  -> drawValue @g
-        Win p -> bool 0 1 $ p == player
+    update r | isNothing player = pure r
+    update r = pure r <* case r of
+        Draw    -> addValue 0.5 -- (drawValue @g)
+        (Win p) -> when (Just p == player) (addValue 1)
+    addValue v = atomically $ modifyTVar' _mValue (+v)
 
-data Child = Select Double | Expand deriving (Eq,Ord,Show)
+explore (log -> logParent) MCTSNode{..} = do
+    (ary,vv) <- atomically $ do
+        ary <- readTVar _mChildren
+        vv <- traverse (eval logParent) (elems ary)
+        pure (ary,vv)
+    let i = fst $ maximumBy (comparing snd) $ zip [0..] vv
+    search (Just $ gamePlayer _mGame) (ary!i)
 
-eval logParent MCT{..}
-    | _mctVisits == 0 = Expand -- Expand > Select _
-    | otherwise       = Select $ exploit + param * explore
+data Value a = Select a | Expand deriving (Eq,Ord,Show)
+
+eval logParent (MCTSNode{..} :: MCTSNode g) = do
+    total <- readTVar _mTotal
+    if total == 0 then pure Expand else do
+        value <- readTVar _mValue
+        let exploit = value / total
+        let explore = logParent / total
+        pure . Select $ exploit + param * explore
   where
-    exploit = _mctScore / _mctVisits
-    explore = sqrt (logParent / _mctVisits)
     param = sqrt 2
 
 rollout g = gameStatus g & maybe next pure where
     next = pickOne (nextGames g) >>= rollout
     pickOne l = getRandomR (0, length l - 1) <&> (l!!)
 
-search player node@(Node m@MCT{..} tt) = case gameStatus _mctGame of
-    -- Terminal node
-    Just r -> pure $ update m tt r
-    -- Unexplored node
-    Nothing | _mctVisits == 0 -> rollout _mctGame <&> update m tt
-    -- Select "best" child
-    Nothing -> do
-        (r,child') <- search (gamePlayer _mctGame) child
-        pure $ update m (aa <> [child'] <> bb) r
-      where
-        vv = eval (log _mctVisits) . rootLabel <$> tt
-        i = fst $ maximumBy (comparing snd) $ zip [0..] vv
-        (aa,child:bb) = splitAt i tt
+mctTest g n | isJust (gameStatus g) = print $ gameStatus g
+mctTest g n = do
+    m <- atomically $ initMCTS g
+    _ <- incrTotal m -- force children to be built
+    for_ [1..n] \_ -> search Nothing m
+    moves <- atomically do
+        ary <- readTVar (_mChildren m)
+        traverse getMove (elems ary)
+    traverse_ print moves
   where
-    update m tt r = (r, Node (m & addResult player r) tt)
-
-mctSearch player = fmap snd . search player
-
-mctSearchN player n t = go n t where
-    go 0 t = pure t
-    go n t = mctSearch player t >>= go (n-1)
-
-bestMove (Node _ tt) =
-    maximumBy (comparing _mctVisits) (rootLabel <$> tt)
-    & NE.head . gameMoves . _mctGame
-
-findMove (Node _ tt) m =
-    find ((==m).NE.head.gameMoves._mctGame.rootLabel) tt
-
-pp MCT{..} =
-    [ show $ NE.head $ gameMoves _mctGame
-    , show $ round _mctVisits
-    , show $ round $ 100 * _mctScore / _mctVisits
-    ]
-
-tabulate stuff =
-    [ intercalate " " $ zipWith align ww ss
-    | ss <- stuff ]
-  where
-    ww = maximum . map length <$> transpose stuff
-    align w s = replicate (w - length s) ' ' <> s
-
-mctTest p g n = do
-    t <- go n (mkTree g)
-    traverse_ putStrLn $ tabulate $ pp . rootLabel <$> subForest t
-    print $ bestMove t
-  where
-    go 0 t = pure t
-    go n t = mctSearch p t >>= go (n-1)
+    getMove MCTSNode{..} = do
+        total <- readTVar _mTotal
+        if total == 0 then pure Expand else do
+            value <- readTVar _mValue
+            let move :| _ = gameMoves _mGame
+            pure $ Select (move, value, total)

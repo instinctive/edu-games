@@ -33,11 +33,16 @@ common shared -- {{{
     , random
     , random-shuffle
     , split
+    , stm
     , tagged
     , text
     , unix
 
 -- }}}
+
+-- library test
+--   import: shared
+--   exposed-modules: Test
 
 library
   import: shared
