@@ -1,7 +1,9 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module MCT where
 
+import Control.Concurrent.Async ( withAsync )
 import Control.Concurrent.STM
 import Control.Monad.Random.Class ( getRandomR )
 import Data.Array
@@ -84,3 +86,69 @@ mctTest g n = do
             value <- readTVar _mValue
             let move :| _ = gameMoves _mGame
             pure $ Just (move, value, total)
+
+-- Search instance
+
+data MCTSearch g = MCTSearch
+    { _sRoot    :: TVar (MCTSNode g)
+    , _sRunning :: TVar Bool
+    }
+
+mctStart MCTSearch{..} = do
+    forever go
+  where
+    go = getRoot >>= search Nothing
+    getRoot = atomically $ readTVar _sRunning >>= bool retry (readTVar _sRoot)
+
+mctRunning MCTSearch{..} b = atomically $ writeTVar _sRunning b
+
+mctCount MCTSearch{..} = atomically do
+    MCTSNode{..} <- readTVar _sRoot
+    readTVar _mTotal <&> floor
+
+getMove MCTSNode{..} = let move :| _ = gameMoves _mGame in move
+
+mctBest MCTSearch{..} = atomically do
+    MCTSNode{..} <- readTVar _sRoot
+    children <- readTVar _mChildren
+    let getTotal MCTSNode{..} = readTVar _mTotal
+    totals <- traverse getTotal $ elems children
+    let (_,i) = maximum $ zip totals [0..]
+    writeTVar _sRoot (children!i)
+    pure $ getMove (children!i)
+
+mctThis MCTSearch{..} move = atomically do
+    MCTSNode{..} <- readTVar _sRoot
+    children <- readTVar _mChildren
+    case find ((==move).getMove.snd) $ zip [0..] $ elems children of
+        Nothing -> pure False
+        Just (i,_) -> writeTVar _sRoot (children!i) >> pure True
+
+instance (Game g p m, Eq p, Eq m) => Search (MCTSearch g) m where
+    startSearch  = mctStart
+    setIsRunning = mctRunning
+    makeBestMove = mctBest
+    makeThisMove = mctThis
+    searchCount  = mctCount
+
+initMCTSearch g = atomically $ do
+    m <- initMCTS g
+    MCTSearch <$> newTVar m <*> newTVar True
+
+-- mctSearchTest :: (Game g p m, Eq p, Eq m, Show m) => g -> Int -> IO ()
+mctSearchTest g n = do
+    s <- initMCTSearch g
+    withAsync (startSearch s) \_ -> go s
+  where
+    go s = do
+        threadDelay 100000 -- 1/10 second
+        count <- searchCount s
+        if count < n then do
+            putStrLn $ show count <> " searches"
+            go s
+          else do
+            setIsRunning s False
+            count <- searchCount s
+            move <- makeBestMove s
+            putStrLn $ show count <> " searches"
+            print move

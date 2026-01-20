@@ -1,7 +1,13 @@
 module Main where
 
+import GHC.Conc
+
 import Quux
 
 main = do
-    [n,p] <- getArgs <&> map (read @Int)
-    mctTest (initTTT :: TTT P2) n p
+    [n] <- getArgs <&> map (read @Int)
+    numcpu <- getNumProcessors
+    numcap <- getNumCapabilities
+    putStrLn $ "numProcessors   = " <> show numcpu
+    putStrLn $ "numCapabilities = " <> show numcap
+    mctSearchTest initTTT n
