@@ -10,8 +10,7 @@ import Data.List.Split (chunksOf)
 import Data.List.NonEmpty (NonEmpty((:|)),(<|))
 import qualified Data.List.NonEmpty as N
 
-import Game ( Game, Result(..) )
-import Game qualified as G
+import Game
 
 data Player = X | O deriving (Eq,Ord,Bounded,Enum,Ix,Show)
 
@@ -29,9 +28,7 @@ data TTT = TTT
     } deriving Show
 makeLenses ''TTT
 
-instance Game TTT where
-    type Player TTT = Player
-    type Move   TTT = Int
+instance Game TTT Player Int where
     gameStatus = _gStatus
     gamePlayer = _gPlayer
     gameMoves  = _gMoves

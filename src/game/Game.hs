@@ -1,13 +1,11 @@
-module Game where
+{-# LANGUAGE FunctionalDependencies #-}
 
-import Data.Kind ( Type )
+module Game where
 
 data Result p = Draw | Win p deriving (Eq,Ord,Show)
 
-class Game g where
-    type Player g :: Type
-    type Move   g :: Type
-    gameStatus :: g -> Maybe (Result (Player g))
-    gamePlayer :: g -> Player g
-    gameMoves  :: g -> NonEmpty (Move g)
+class Game g p m | g -> p, g -> m where
+    gamePlayer :: g -> p
+    gameStatus :: g -> Maybe (Result p)
+    gameMoves  :: g -> NonEmpty m
     nextGames  :: g -> [g]

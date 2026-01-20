@@ -7,8 +7,7 @@ module Chess
 
 import Data.Text ( Text )
 
-import Game ( Game, Result )
-import Game qualified as G
+import Game
 
 data Color = White | Black deriving (Eq,Ord,Bounded,Enum,Ix,Show)
 
@@ -20,9 +19,7 @@ data Chess = Chess
     , _chessMoves  :: !(NonEmpty Move)
     } deriving Show
 
-instance Game Chess where
-    type Player Chess = Color
-    type Move   Chess = Move
+instance Game Chess Color Move where
     gameStatus = _chessStatus
     gamePlayer = _chessPlayer
     gameMoves  = _chessMoves
