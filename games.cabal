@@ -7,7 +7,7 @@ common shared -- {{{
     , base hiding (Prelude)
     , base-prelude (BasePrelude as Prelude)
   default-language: GHC2021
-  include-dirs: include
+  -- include-dirs: include
   default-extensions:
     , BlockArguments
     , CPP
@@ -43,7 +43,13 @@ common shared -- {{{
 
 library
   import: shared
-  hs-source-dirs: src, src/game, src/mct, src/ttt, src/chess
+  hs-source-dirs: src, src/game, src/mct
+  exposed-modules: Games
+  other-modules: Game, MCT
+
+library quux
+  import: shared
+  hs-source-dirs: src/quux, src/game, src/mct, src/ttt, src/chess
   exposed-modules: Quux
   other-modules: Game, MCT, TTT, Chess
 
@@ -75,5 +81,5 @@ executable mctest
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   main-is: mctest.hs
   hs-source-dirs: app
-  build-depends: games
+  build-depends: quux
 
