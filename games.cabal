@@ -41,20 +41,11 @@ common shared -- {{{
 
 -- }}}
 
--- library test
---   import: shared
---   exposed-modules: Test
-
 library
   import: shared
   hs-source-dirs: src, src/game, src/mct, src/ttt, src/chess
   exposed-modules: Quux
   other-modules: Game, MCT, TTT, Chess
-
-library total
-  import: shared
-  hs-source-dirs: src/total
-  exposed-modules: Total
 
 library game
   import: shared
