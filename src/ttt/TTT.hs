@@ -1,9 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module TTT
-    ( TTT
-    , initTTT
-    ) where
+module TTT (TTT, initTTT) where
 
 import Control.Lens hiding ((<|))
 import Data.List.Split (chunksOf)
@@ -12,7 +9,7 @@ import qualified Data.List.NonEmpty as N
 
 import Game
 
-data Player = X | O deriving (Eq,Ord,Bounded,Enum,Ix,Show)
+data Player = X | O deriving (Eq,Show)
 
 opp X = O
 opp O = X
@@ -20,19 +17,21 @@ opp O = X
 type Sq    = Either Int Player
 type Board = [Sq]
 
+type TTTResult = Result2P Player
+
 data TTT = TTT
     { _gPlayer :: !Player
-    , _gStatus :: !(Maybe (Result Player))
+    , _gStatus :: !(Maybe TTTResult)
     , _gMoves  :: !(NonEmpty Int)
     , _gBoard  :: Board
     } deriving Show
 makeLenses ''TTT
 
-instance Game TTT Player Int where
-    gameStatus = _gStatus
-    gamePlayer = _gPlayer
-    gameMoves  = _gMoves
-    nextGames  = tttNext
+instance Game TTT Player Int TTTResult where
+    gameStatus   = _gStatus
+    gamePlayer   = _gPlayer
+    gameMoves    = _gMoves
+    gameChildren = tttNext
 
 initTTT = TTT X Nothing (0:|[]) $ Left <$> [1..9]
 

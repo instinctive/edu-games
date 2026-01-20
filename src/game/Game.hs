@@ -2,13 +2,19 @@
 
 module Game where
 
-data Result p = Draw | Win p deriving (Eq,Ord,Show)
+class Eq p => Result r p | r -> p where
+    resultValue :: r -> p -> Double
 
-class Game g p m | g -> p, g -> m where
-    gamePlayer :: g -> p
-    gameStatus :: g -> Maybe (Result p)
-    gameMoves  :: g -> NonEmpty m
-    nextGames  :: g -> [g]
+data Result2P p = Draw | Win p deriving (Eq,Ord,Show)
+instance Eq p => Result (Result2P p) p where
+    resultValue Draw _ = 0.5
+    resultValue (Win a) b = bool 0 1 (a == b)
+
+class (Eq m, Eq r) => Game g p m r | g -> p, g -> m, g -> r where
+    gamePlayer   :: g -> p
+    gameStatus   :: g -> Maybe r
+    gameMoves    :: g -> NonEmpty m
+    gameChildren :: g -> [g]
 
 class Search s m | s -> m where
     startSearch  :: s -> IO ()

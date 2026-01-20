@@ -1,4 +1,3 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module MCT where
@@ -9,8 +8,6 @@ import Control.Monad.Random.Class ( getRandomR )
 import Data.Array
 
 import Game
-
--- class (Game g, Eq (Player g)) => MCTS g where drawValue :: Double
 
 data MCTSNode g = MCTSNode
     { _mGame     :: g
@@ -28,23 +25,22 @@ incrTotal MCTSNode{..} = atomically $ do
     t <- readTVar _mTotal
     writeTVar _mTotal (t+1)
     when (t == 0 && gameStatus _mGame == Nothing) do
-        mm <- traverse initMCTS (nextGames _mGame)
+        mm <- traverse initMCTS (gameChildren _mGame)
         let ary = listArray (0, length mm - 1) mm
         writeTVar _mChildren ary
     pure t
 
-search player node@(MCTSNode{..} :: MCTSNode g) = do
+search player node@MCTSNode{..} = do
     total <- incrTotal node
     case gameStatus _mGame of
         Just r -> update r
         Nothing | total == 0 -> rollout _mGame >>= update
         Nothing -> explore total node >>= update
   where
-    update r | isNothing player = pure r
-    update r = pure r <* case r of
-        Draw    -> addValue 0.5 -- (drawValue @g)
-        (Win p) -> when (Just p == player) (addValue 1)
-    addValue v = atomically $ modifyTVar' _mValue (+v)
+    update r = player & maybe (pure r) (addValue r . resultValue r)
+    addValue r v = do
+        atomically $ modifyTVar' _mValue (+v)
+        pure r
 
 explore (log -> logParent) MCTSNode{..} = do
     (ary,vv) <- atomically $ do
@@ -67,7 +63,7 @@ eval logParent (MCTSNode{..} :: MCTSNode g) = do
     param = sqrt 2
 
 rollout g = gameStatus g & maybe next pure where
-    next = pickOne (nextGames g) >>= rollout
+    next = pickOne (gameChildren g) >>= rollout
     pickOne l = getRandomR (0, length l - 1) <&> (l!!)
 
 mctTest g n | isJust (gameStatus g) = print $ gameStatus g
@@ -124,7 +120,7 @@ mctThis MCTSearch{..} move = atomically do
         Nothing -> pure False
         Just (i,_) -> writeTVar _sRoot (children!i) >> pure True
 
-instance (Game g p m, Eq p, Eq m) => Search (MCTSearch g) m where
+instance (Result r p, Game g p m r) => Search (MCTSearch g) m where
     startSearch  = mctStart
     setIsRunning = mctRunning
     makeBestMove = mctBest
@@ -135,7 +131,6 @@ initMCTSearch g = atomically $ do
     m <- initMCTS g
     MCTSearch <$> newTVar m <*> newTVar True
 
--- mctSearchTest :: (Game g p m, Eq p, Eq m, Show m) => g -> Int -> IO ()
 mctSearchTest g n = do
     s <- initMCTSearch g
     withAsync (startSearch s) \_ -> go s
