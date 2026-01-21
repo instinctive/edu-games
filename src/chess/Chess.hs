@@ -55,8 +55,8 @@ opp Black = White
 -- Squares {{{
 -- ------------------------------------------------------------
 
-newtype File = File Int
-newtype Rank = Rank Int
+newtype File = File Int deriving (Eq,Ord)
+newtype Rank = Rank Int deriving (Eq,Ord)
 instance Show File where show (File i) = [ chr $ ord 'a' + i ]
 instance Show Rank where show (Rank i) = [ intToDigit $ i + 1 ]
 
@@ -83,6 +83,7 @@ pawnRank Black = rank7
 
 newtype Sq = Sq Int deriving (Eq,Ord,Enum,Ix)
 
+sqRank (Sq q) = Rank $ q .&. 7
 sqFileRank (Sq q) = bimap File Rank (unsafeShiftR q 3, q .&. 7)
 mkSq (File file) (Rank rank) = Sq $ unsafeShiftL file 3 .|. rank
 allFiles = File <$> [0..7]
@@ -177,7 +178,8 @@ startBitBoard = foldl' f emptyBitBoard $
 
 data MType
     = Jump Sq | Slide [Sq]
-    | Advance Sq | Double Sq Sq | EnPassant Sq Sq | Promote Sq PType
+    | Advance (Maybe PType) Sq  | Capture (Maybe PType) Sq
+    | Double Sq Sq | EnPassant Sq Sq
     | CastleKSide | CastleQSide
     deriving Show
 
@@ -187,16 +189,29 @@ moveArray = Total $ listArray (minBound,maxBound)
 
 mkMoves :: Sq -> Color -> PType -> [MType]
 
-mkMoves sq c Pawn   = undefined
-mkMoves sq c Bishop = undefined
-mkMoves sq c Rook   = undefined
-mkMoves sq c Queen  = undefined
+mkMoves q c Pawn =
+    ( Capture <$> prom <*> mapMaybe ($ q) (xfmPawnCaptures c) ) <>
+    ( sqRank q == pawnRank c & bool
+        ( Advance <$> prom <*> mapMaybe ($ q) [toColor $ opp c] )
+        ( maybeToList $ Double <$> one <*> two ) )
+  where
+    one = toColor (opp c) q
+    two = toColor (opp c) =<< one
+    prom = sqRank q == pawnRank (opp c)
+         & bool [Nothing] (Just <$> [Knight .. Queen])
 
+mkMoves q c Rook   = Slide <$> xfmRepeat q <$> xfmOrtho
+mkMoves q c Bishop = Slide <$> xfmRepeat q <$> xfmDiags
+mkMoves q c Queen  = mkMoves q c Rook <> mkMoves q c Bishop
 mkMoves q c King   = Jump <$> delete q (mapMaybe ($ q) xfmKing)
 mkMoves q c Knight = Jump <$> mapMaybe ($ q) xfmKnight
 
-xfmKing = (>=>) <$> [toBlack, Just, toWhite] <*> [toKSide, Just, toQSide]
+xfmRepeat q xfm = unfoldr (fmap double . xfm) q where double x = (x,x)
 
+xfmPawnCaptures c = (>=>) (toColor $ opp c) <$> [toQSide,toKSide]
+xfmOrtho = [toBlack,toWhite,toQSide,toKSide]
+xfmDiags = (>=>) <$> [toBlack,toWhite] <*> [toQSide,toKSide]
+xfmKing = (>=>) <$> [toBlack, Just, toWhite] <*> [toKSide, Just, toQSide]
 xfmKnight =
     ( (>=>) <$> [twice toBlack, twice toWhite] <*> [toKSide, toQSide] ) <>
     ( (>=>) <$> [toBlack, toWhite] <*> [twice toKSide, twice toQSide] ) 
