@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module TTT (TTT, initTTT) where
+module TTT where
 
 import Control.Lens hiding ((<|))
 import Data.List.Split (chunksOf)
@@ -70,18 +70,21 @@ playTTT g@TTT{..} = do
 showResult Draw = "Game is a draw."
 showResult (Win p) = show p <> " has won."
 
-showSq = either show show
+showPlayer X = "\ESC[92mX\ESC[0m"
+showPlayer O = "\ESC[91mO\ESC[0m"
+
+showSq = either show showPlayer
 
 showTTT TTT{..} =
     intersperse "---+---+---"
     [ intercalate "|"
       [ " " <> showSq sq <> " " | sq <- row ]
       | row <- chunksOf 3 _gBoard ]
-    <>
-    [ "Moves: " <> intercalate ", " (reverse $ show <$> N.toList _gMoves) ]
+    -- <>
+    -- [ "Moves: " <> intercalate ", " (reverse $ show <$> N.toList _gMoves) ]
     <>
     [ _gStatus & maybe
-      (show _gPlayer <> " to move.")
+      (show _gPlayer <> " to move:")
       showResult ]
 
 putTTT = traverse_ putStrLn . showTTT
