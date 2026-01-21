@@ -49,9 +49,9 @@ library
 
 library quux
   import: shared
-  hs-source-dirs: src/quux, src/game, src/mct, src/ttt, src/chess
+  hs-source-dirs: src/quux, src/game, src/mct, src/ttt
   exposed-modules: Quux
-  other-modules: Game, MCT, TTT, Chess
+  other-modules: Game, MCT, TTT
 
 library game
   import: shared
@@ -72,8 +72,8 @@ library ttt
 
 library chess
   import: shared
-  hs-source-dirs: src/ttt
-  exposed-modules: TTT
+  hs-source-dirs: src/chess
+  exposed-modules: Chess
   build-depends: game
 
 executable mctest
