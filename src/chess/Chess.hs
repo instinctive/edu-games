@@ -10,6 +10,7 @@ import Data.Array.Base ( unsafeAt, unsafeReplace )
 import Data.Array.Unboxed
 import Data.Bits.Lens ( bitAt )
 import Data.Text ( Text )
+import Linear.V2
 
 import Game
 
@@ -27,7 +28,10 @@ class (Eq a, Ord a, Bounded a, Enum a, Ix a, Show a) => ENUM a
 instance ENUM Color
 instance ENUM PType
 
-data Piece = Piece { _pColor :: !Color, _pType :: !PType }
+data Piece = Piece
+    { _pColor :: !Color
+    , _pType :: !PType
+    }
 makeLenses ''Piece
 
 instance Show Piece where
@@ -43,6 +47,9 @@ instance Show Piece where
         ptype Queen  = 'q'
         ptype King   = 'k'
 
+opp White = Black
+opp Black = White
+
 -- }}}
 
 -- Squares {{{
@@ -53,7 +60,6 @@ newtype Rank = Rank Int
 instance Show File where show (File i) = [ chr $ ord 'a' + i ]
 instance Show Rank where show (Rank i) = [ intToDigit $ i + 1 ]
 
--- File and Rank constants {{{
 fileA = File 0
 fileB = File 1
 fileC = File 2
@@ -70,15 +76,21 @@ rank4 = Rank 3
 rank5 = Rank 4
 rank6 = Rank 5
 rank7 = Rank 6
-rank8= Rank 7
--- }}}
+rank8 = Rank 7
 
-newtype Sq = Sq Int
+pawnRank White = rank2
+pawnRank Black = rank7
+
+newtype Sq = Sq Int deriving (Eq,Ord,Enum,Ix)
 
 sqFileRank (Sq q) = bimap File Rank (unsafeShiftR q 3, q .&. 7)
 mkSq (File file) (Rank rank) = Sq $ unsafeShiftL file 3 .|. rank
 allFiles = File <$> [0..7]
 rankSqs rank = flip mkSq rank <$> allFiles
+
+instance Bounded Sq where
+    minBound = Sq  0
+    maxBound = Sq 63
 
 instance Show Sq where
     show sq = show file <> show rank where
@@ -95,11 +107,11 @@ readSq [c,d] = mk <$> file <*> rank where
 
 instance IsString Sq where fromString = fromJust . readSq
 
-toBlack, toWhite, toKSide, toQSide :: (File,Rank) -> Maybe (File,Rank)
-toBlack (file, Rank i) = i < 7 & bool Nothing (Just (file, Rank (i+1)))
-toWhite (file, Rank i) = i > 0 & bool Nothing (Just (file, Rank (i-1)))
-toKSide (File i, rank) = i < 7 & bool Nothing (Just (File (i+1), rank))
-toQSide (File i, rank) = i > 0 & bool Nothing (Just (File (i-1), rank))
+toBlack, toWhite, toKSide, toQSide :: Sq -> Maybe Sq
+toBlack (sqFileRank -> (file, Rank i)) = i < 7 & bool Nothing (Just $ mkSq file (Rank (i+1)))
+toWhite (sqFileRank -> (file, Rank i)) = i > 0 & bool Nothing (Just $ mkSq file (Rank (i-1)))
+toKSide (sqFileRank -> (File i, rank)) = i < 7 & bool Nothing (Just $ mkSq (File (i+1)) rank)
+toQSide (sqFileRank -> (File i, rank)) = i > 0 & bool Nothing (Just $ mkSq (File (i-1)) rank)
 
 toColor Black = toBlack
 toColor White = toWhite
@@ -114,10 +126,10 @@ universe = [minBound..maxBound]
 
 newtype Total a i e = Total (a i e) deriving Show
 
-totalArray :: forall a i e. (IArray a e, ENUM i) => [e] -> Total a i e
+totalArray :: forall a i e. (IArray a e, Bounded i, Enum i, Ix i) => [e] -> Total a i e
 totalArray = Total . listArray (minBound,maxBound)
 
-totalAt :: forall a i e. (IArray a e, ENUM i) => i -> Lens' (Total a i e) e
+totalAt :: forall a i e. (IArray a e, Bounded i, Enum i, Ix i) => i -> Lens' (Total a i e) e
 totalAt i f (Total ary) = let x = fromEnum i in
     f (unsafeAt ary x) <&> \e -> Total $ unsafeReplace ary [(x,e)]
 
@@ -157,6 +169,38 @@ startBitBoard = foldl' f emptyBitBoard $
   where
     ptypes = [Rook,Knight,Bishop,Queen,King,Bishop,Knight,Rook]
     f !bb (sq,piece) = bb & bbAt sq .~ Just piece
+
+-- }}}
+
+-- Moves {{{
+-- ------------------------------------------------------------
+
+data MType
+    = Jump Sq | Slide [Sq]
+    | Advance Sq | Double Sq Sq | EnPassant Sq Sq | Promote Sq PType
+    | CastleKSide | CastleQSide
+    deriving Show
+
+moveArray :: Total Array (Sq,Color,PType) [MType]
+moveArray = Total $ listArray (minBound,maxBound)
+    [ mkMoves p sq c | sq <- universe, c  <- universe, p  <- universe ]
+
+mkMoves :: Sq -> Color -> PType -> [MType]
+
+mkMoves sq c Pawn   = undefined
+mkMoves sq c Bishop = undefined
+mkMoves sq c Rook   = undefined
+mkMoves sq c Queen  = undefined
+
+mkMoves q c King   = Jump <$> delete q (mapMaybe ($ q) xfmKing)
+mkMoves q c Knight = Jump <$> mapMaybe ($ q) xfmKnight
+
+xfmKing = (>=>) <$> [toBlack, Just, toWhite] <*> [toKSide, Just, toQSide]
+
+xfmKnight =
+    ( (>=>) <$> [twice toBlack, twice toWhite] <*> [toKSide, toQSide] ) <>
+    ( (>=>) <$> [toBlack, toWhite] <*> [twice toKSide, twice toQSide] ) 
+  where twice f = f >=> f
 
 -- }}}
 
