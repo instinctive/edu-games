@@ -124,7 +124,10 @@ mctThis MCTSearch{..} move = atomically do
         Nothing -> pure False
         Just (i,_) -> writeTVar _sRoot (children!i) >> pure True
 
-instance (Result r p, Game g p m r) => Search (MCTSearch g) m where
+mctGame MCTSearch{..} = atomically $ readTVar _sRoot <&> _mGame
+
+instance (Result r p, Game g p m r) => Search (MCTSearch g) g m where
+    searchGame   = mctGame
     startSearch  = mctStart
     setIsRunning = mctRunning
     makeBestMove = mctBest

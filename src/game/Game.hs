@@ -16,7 +16,8 @@ class (Eq m, Eq r) => Game g p m r | g -> p, g -> m, g -> r where
     gameMoves    :: g -> NonEmpty m
     gameChildren :: g -> [g]
 
-class Search s m | s -> m where
+class Search s g m | s -> g, s -> m where
+    searchGame   :: s -> IO g
     startSearch  :: s -> IO ()
     setIsRunning :: s -> Bool -> IO ()
     makeBestMove :: s -> IO m
