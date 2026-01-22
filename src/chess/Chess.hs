@@ -186,6 +186,7 @@ castleArray = totalArray
 data BitBoard = BitBoard
     { _bbColor :: !(Total UArray Color Word64)
     , _bbPType :: !(Total UArray PType Word64)
+    , _bbKingSq :: !(Total Array Color Sq)
     , _bbCastle :: !Castle
     , _bbEnPassant :: !(Maybe Sq)
     } deriving Show
@@ -209,12 +210,16 @@ bbAt sq@(Sq q) f bb@BitBoard{..} =
     update (Piece c p) b
         = set (bbColor.totalAt c.bitAt q) b
         . set (bbPType.totalAt p.bitAt q) b
-        . \bb -> foldr f bb (castleArray^.totalAt sq)
-      where f idx = bbCastle.castle idx .~ False
+        . bool id (bbKingSq.totalAt c .~ sq) (b && p == King)
+        . bool id updateCastle (not b)
+      where
+        updateCastle bb = foldr f bb (castleArray^.totalAt sq)
+        f idx = bbCastle.castle idx .~ False
 
 emptyBitBoard = BitBoard
     (totalArray $ repeat 0)
     (totalArray $ repeat 0)
+    (totalArray $ kingSq <$> universe)
     (Castle 0)
     Nothing
 
@@ -350,6 +355,8 @@ isAttacked bb c q =
     ptypes = concatMap \(MoveTo sq) -> sqPType bb sq & maybeToList
 
 -- }}}
+
+
 
 type Move = Text
 
