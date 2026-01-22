@@ -331,23 +331,23 @@ isAttacked bb c q =
     pawn || king || knight || rook || bishop
   where
     pawn = moveArray ^.. ix (q,c,Pawn) . traversed . filtered (is _Capture)
-        & concatMap (moveSqs . validMoves bb c)
-        & any ((==Just Pawn).sqPType bb)
+        & concatMap (ptypes . validMoves bb c)
+        & any (==Pawn)
     king = moveArray ^.. ix (q,c,King) . traversed . filtered (is _Jump)
-        & concatMap (moveSqs . validMoves bb c)
-        & any ((==Just King).sqPType bb)
+        & concatMap (ptypes . validMoves bb c)
+        & any (==King)
     knight = moveArray ^. ix (q,c,Knight)
-        & concatMap (moveSqs . validMoves bb c)
-        & any ((==Just Knight).sqPType bb)
+        & concatMap (ptypes . validMoves bb c)
+        & any (==Knight)
     rook = moveArray ^. ix (q,c,Rook)
-        & concatMap (moveSqs . final . validMoves bb c)
-        & any ((`elem` [Just Rook,Just Queen]).sqPType bb)
+        & concatMap (ptypes . final . validMoves bb c)
+        & any (`elem` [Rook,Queen])
     bishop = moveArray ^. ix (q,c,Bishop)
-        & concatMap (moveSqs . final . validMoves bb c)
-        & any ((`elem` [Just Bishop,Just Queen]).sqPType bb)
+        & concatMap (ptypes . final . validMoves bb c)
+        & any (`elem` [Bishop,Queen])
     final (_:xx@(_:_)) = final xx
     final xx = xx
-    moveSqs = map \(MoveTo sq) -> sq
+    ptypes = concatMap \(MoveTo sq) -> sqPType bb sq & maybeToList
 
 -- }}}
 
