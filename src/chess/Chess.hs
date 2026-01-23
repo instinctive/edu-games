@@ -10,7 +10,7 @@ import Control.Lens.Extras ( is )
 import Data.Array.Base ( unsafeAt, unsafeReplace )
 import Data.Array.Unboxed
 import Data.Bits.Lens ( bitAt )
-import Data.Text ( Text )
+import Data.Text ( Text, pack )
 import Linear.V2
 
 import Game
@@ -184,10 +184,10 @@ castleArray = totalArray
 -- ------------------------------------------------------------
 
 data BitBoard = BitBoard
-    { _bbColor :: !(Total UArray Color Word64)
-    , _bbPType :: !(Total UArray PType Word64)
-    , _bbKingSq :: !(Total Array Color Sq)
-    , _bbCastle :: !Castle
+    { _bbColor     :: !(Total UArray Color Word64)
+    , _bbPType     :: !(Total UArray PType Word64)
+    , _bbKingSq    :: !(Total Array Color Sq)
+    , _bbCastle    :: !Castle
     , _bbEnPassant :: !(Maybe Sq)
     } deriving Show
 makeLenses ''BitBoard
@@ -293,18 +293,26 @@ xfmKnight =
 -- }}}
 -- }}}
 
--- getMoves {{{
+-- Valid Moves {{{
 -- ------------------------------------------------------------
 
 data Valid
     = MoveTo Sq
-    | DoubleTo Sq | EnPassantTo Sq Sq
+    | DoubleTo Sq | EPTo Sq Sq
     | KSideTo Sq | QSideTo Sq
     deriving Show
 makePrisms ''Valid
 
-getMoves bb q c p =
-    concatMap (validMoves bb c) (moveArray!(q,c,p))
+-- {{{
+type UCIMove = Text
+
+mkUCI src = \case
+    MoveTo   tgt   -> uci tgt
+    DoubleTo tgt   -> uci tgt
+    EPTo     tgt _ -> uci tgt
+    KSideTo  tgt   -> uci tgt
+    QSideTo  tgt   -> uci tgt
+  where uci tgt = pack $ show src <> show tgt
 
 validMoves bb c m = case m of
     Jump t | sqColor bb t /= Just c -> [MoveTo t]
@@ -315,7 +323,7 @@ validMoves bb c m = case m of
            else MoveTo <$> (x:ee)
     Advance t | sqColor bb t == Nothing      -> [MoveTo t]
     Capture t | sqColor bb t == Just (opp c) -> [MoveTo t]
-    EnPassant u v | bb^.bbEnPassant == Just u -> [EnPassantTo u v]
+    EnPassant u v | bb^.bbEnPassant == Just u -> [EPTo u v]
     Double u v | sqColor bb u == Nothing -> [MoveTo u] <>
         bool [] [DoubleTo v] (sqColor bb v == Nothing)
     CastleKSide tt | canCastle KSide tt -> [KSideTo $ tt!!2]
@@ -326,6 +334,24 @@ validMoves bb c m = case m of
         ( bb^.bbCastle.castle (c,side)) &&
         ( all ((==Nothing).sqColor bb) (tail tt) ) &&
         ( not $ any (isAttacked bb c) (take 3 tt) )
+-- }}}
+-- }}}
+
+-- Apply Move {{{
+
+applyMove bb c q v =
+    if inCheck then [] else [bb']
+  where
+    inCheck = isAttacked bb' c (bb' ^. bbKingSq.totalAt c)
+    bb' = bb & set bbEnPassant Nothing . case v of
+        MoveTo   t   -> move q t
+        DoubleTo t   -> move q t . set bbEnPassant (toColor c t)
+        EPTo     t u -> move q t . clear u
+        KSideTo  t   -> move q t . move (rookSq c KSide) (fromJust $ toQSide t)
+        QSideTo  t   -> move q t . move (rookSq c QSide) (fromJust $ toKSide t)
+    move a b = let Just p = bb^.bbAt a in clear a . place b p
+    clear a   = set (bbAt a) Nothing
+    place a p = set (bbAt a) (Just p)
 
 -- }}}
 
@@ -356,7 +382,21 @@ isAttacked bb c q =
 
 -- }}}
 
+-- getMoves {{{
+-- ------------------------------------------------------------
 
+getMoves :: BitBoard -> Color -> [(UCIMove,BitBoard)]
+getMoves bb c =
+    [ (mkUCI q valid, bb')
+    | q <- universe
+    , sqColor bb q == Just c
+    , let Just p = sqPType bb q
+    , raw <- moveArray!(q,c,p)
+    , valid <- validMoves bb c raw
+    , bb' <- applyMove bb c q valid
+    ]
+
+-- }}}
 
 type Move = Text
 
