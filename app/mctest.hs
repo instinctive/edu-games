@@ -10,4 +10,4 @@ main = do
     numcap <- getNumCapabilities
     putStrLn $ "numProcessors   = " <> show numcpu
     putStrLn $ "numCapabilities = " <> show numcap
-    mctSearchTest initTTT n
+    mctSearchTest initChess n

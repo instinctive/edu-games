@@ -49,9 +49,9 @@ library
 
 library quux
   import: shared
-  hs-source-dirs: src/quux, src/game, src/mct, src/ttt
+  hs-source-dirs: src/quux, src/game, src/mct, src/ttt, src/chess
   exposed-modules: Quux
-  other-modules: Game, MCT, TTT
+  other-modules: Game, MCT, TTT, Chess
 
 library game
   import: shared

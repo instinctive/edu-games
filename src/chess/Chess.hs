@@ -4,12 +4,14 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 module Chess where
+-- module Chess ( initChess ) where
 
-import Control.Lens hiding ( universe )
+import Control.Lens hiding ( universe, (<|) )
 import Control.Lens.Extras ( is )
 import Data.Array.Base ( unsafeAt, unsafeReplace )
 import Data.Array.Unboxed
 import Data.Bits.Lens ( bitAt )
+import Data.List.NonEmpty ( NonEmpty((:|)), (<|) )
 import Data.Text ( Text, pack )
 import Linear.V2
 
@@ -293,7 +295,7 @@ xfmKnight =
 -- }}}
 -- }}}
 
--- Valid Moves {{{
+-- validMoves {{{
 -- ------------------------------------------------------------
 
 data Valid
@@ -337,7 +339,7 @@ validMoves bb c m = case m of
 -- }}}
 -- }}}
 
--- Apply Move {{{
+-- applyMove {{{
 
 applyMove bb c q v =
     if inCheck then [] else [bb']
@@ -390,6 +392,8 @@ getMoves bb c =
     [ (mkUCI q valid, bb')
     | q <- universe
     , sqColor bb q == Just c
+    , let mp = sqPType bb q
+    -- , bool (traceShow (c,mp) False) True $ isJust mp
     , let Just p = sqPType bb q
     , raw <- moveArray!(q,c,p)
     , valid <- validMoves bb c raw
@@ -398,19 +402,41 @@ getMoves bb c =
 
 -- }}}
 
-type Move = Text
-
 type ChessResult = Result2P Color
 
 data Chess = Chess
-    { _chessPlayer :: Color
+    { _chessPlayer :: !Color
     , _chessStatus :: !(Maybe ChessResult)
-    , _chessMoves  :: !(NonEmpty Move)
-    , _chessBoard  :: BitBoard
+    , _chessDepth  :: !Int
+    , _chessMoves  :: !(NonEmpty UCIMove)
+    , _chessBoard  :: !BitBoard
     } deriving Show
+makeLenses ''Chess
 
-instance Game Chess Color Move ChessResult where
-    gameStatus   = _chessStatus
+instance Game Chess Color UCIMove ChessResult where
     gamePlayer   = _chessPlayer
+    gameStatus   = _chessStatus
     gameMoves    = _chessMoves
-    gameChildren = const []
+    gameChildren = chessChildren
+
+initChess = Chess White Nothing 0 (pack "init":|[]) startBitBoard
+
+inCheck Chess{..} =
+    isAttacked _chessBoard _chessPlayer
+    $ _chessBoard^.bbKingSq.totalAt _chessPlayer
+
+getMovesChess Chess{..} = getMoves _chessBoard _chessPlayer
+
+chessChildren chess =
+    setStatus . mk <$> getMovesChess chess
+  where
+    mk (move,bb) = chess
+        & over chessPlayer opp
+        . over chessDepth (+1)
+        . over chessMoves (move<|)
+        . set chessBoard bb
+    setStatus g@Chess{..}
+        | _chessDepth > 50 = g & set chessStatus (Just Draw)
+        | not (null $ getMovesChess g) = g
+        | inCheck g = g & set chessStatus (Just . Win $ g^.chessPlayer.to opp)
+        | otherwise = g & set chessStatus (Just Draw)
