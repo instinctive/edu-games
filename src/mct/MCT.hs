@@ -108,6 +108,13 @@ mctCount MCTSearch{..} = atomically do
 
 getMove MCTSNode{..} = let move :| _ = gameMoves _mGame in move
 
+mctThis MCTSearch{..} move = atomically do
+    MCTSNode{..} <- readTVar _sRoot
+    children <- readTVar _mChildren
+    case find ((==move).getMove.snd) $ zip [0..] $ elems children of
+        Nothing -> pure False
+        Just (i,_) -> writeTVar _sRoot (children!i) >> pure True
+
 mctBest MCTSearch{..} = atomically do
     MCTSNode{..} <- readTVar _sRoot
     children <- readTVar _mChildren
@@ -116,13 +123,6 @@ mctBest MCTSearch{..} = atomically do
     let (_,i) = maximum $ zip totals [0..]
     writeTVar _sRoot (children!i)
     pure $ getMove (children!i)
-
-mctThis MCTSearch{..} move = atomically do
-    MCTSNode{..} <- readTVar _sRoot
-    children <- readTVar _mChildren
-    case find ((==move).getMove.snd) $ zip [0..] $ elems children of
-        Nothing -> pure False
-        Just (i,_) -> writeTVar _sRoot (children!i) >> pure True
 
 mctGame MCTSearch{..} = atomically $ readTVar _sRoot <&> _mGame
 
@@ -138,10 +138,12 @@ initMCTSearch g = atomically $ do
     m <- initMCTS g
     MCTSearch <$> newTVar m <*> newTVar True
 
+mctSearchTest :: (Game g p m r, Result r p, Show m) => g -> Int -> IO ()
 mctSearchTest g n = do
     s <- initMCTSearch g
     withAsync (startSearch s) \_ -> go s
   where
+    go :: (Game g p m r, Result r p, Show m) => MCTSearch g -> IO ()
     go s = do
         threadDelay 100000 -- 1/10 second
         count <- searchCount s
@@ -151,6 +153,17 @@ mctSearchTest g n = do
           else do
             setIsRunning s False
             count <- searchCount s
-            move <- makeBestMove s
             putStrLn $ show count <> " searches"
+            root <- atomically $ readTVar (_sRoot s)
+            children <- atomically $ readTVar (_mChildren root)
+            moves <- for (elems children) \MCTSNode{..} -> do
+                let m = lastMove _mGame
+                value <- atomically $ readTVar _mValue
+                total <- atomically $ readTVar _mTotal
+                pure (m,100 * value/total)
+            traverse_ print $ sortBy (comparing $ Down . snd) moves
+            move <- makeBestMove s
             print move
+
+lastMove :: Game g p m r => g -> m
+lastMove g = let (m:|_) = gameMoves g in m
