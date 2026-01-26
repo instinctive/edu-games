@@ -1,7 +1,8 @@
 -- Pragmas and Imports {{{
 -- ------------------------------------------------------------
 
-{-# LANGUAGE TemplateHaskell #-}
+-- {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell   #-}
 
 module Chess where
 -- module Chess ( initChess ) where
@@ -11,8 +12,11 @@ import Control.Lens.Extras ( is )
 import Data.Array.Base ( unsafeAt, unsafeReplace )
 import Data.Array.Unboxed
 import Data.Bits.Lens ( bitAt )
+import Data.Map.Strict ( Map )
+import Data.Map.Strict qualified as M
 import Data.List.NonEmpty ( NonEmpty((:|)), (<|) )
 import Data.Text ( Text, pack )
+import GHC.Ix ( unsafeIndex )
 import Linear.V2
 
 import Game
@@ -23,19 +27,19 @@ import Game
 -- ------------------------------------------------------------
 
 #define ENUM Eq,Ord,Bounded,Enum,Ix,Show
-data BSide = KSide | QSide deriving (ENUM)
+data Side = KSide | QSide deriving (ENUM)
 data Color = White | Black deriving (ENUM)
 data PType = Pawn | Knight | Bishop | Rook | Queen | King deriving (ENUM)
 #undef ENUM
 
 class (Eq a, Ord a, Bounded a, Enum a, Ix a, Show a) => ENUM a
-instance ENUM BSide
+instance ENUM Side
 instance ENUM Color
 instance ENUM PType
 
 data Piece = Piece
     { _pColor :: !Color
-    , _pType :: !PType
+    , _pType  :: !PType
     }
 makeLenses ''Piece
 
@@ -83,73 +87,88 @@ rank6 = Rank 5
 rank7 = Rank 6
 rank8 = Rank 7
 
+pieceRank White = rank1
+pieceRank Black = rank8
 pawnRank White = rank2
 pawnRank Black = rank7
 epRank White = rank5
 epRank Black = rank4
 -- }}}
 
-newtype Sq = Sq Int -- {{{
-    deriving (Eq,Ord,Enum,Ix)
+newtype Sq = Sq (V2 Int) -- {{{
+    deriving (Eq,Ord,Ix,Num)
 
 instance Bounded Sq where
-    minBound = Sq  0
-    maxBound = Sq 63
+    minBound = Sq (V2 0 0)
+    maxBound = Sq (V2 7 7)
 
 instance Show Sq where
-    show sq = show file <> show rank where
-        (file,rank) = sqFileRank sq
+    show (Sq (V2 file rank)) = show (File file) <> show (Rank rank)
 
 instance Read Sq where
-    readsPrec _ (c:d:more) = maybeToList $ (,more) <$> readSq [c,d]
+    readsPrec _ (c:d:more) = maybeToList $ (,more) <$> readSq []
     readsPrec _ _ = []
 
 instance IsString Sq where fromString = fromJust . readSq
 
 readSq [c,d] = mk <$> file <*> rank where
-    mk file rank = Sq $ file * 8 + rank
+    mk file rank = Sq (V2 file rank)
     file = findIndex (==c) "abcdefgh"
     rank = findIndex (==d) "12345678"
+readSq s = error $ "readSq " <> show s
+
+readSq' = fromJust . readSq
 
 -- }}}
 
-sqRank (Sq q) = Rank $ q .&. 7
-sqFileRank (Sq q) = bimap File Rank (unsafeShiftR q 3, q .&. 7)
-mkSq (File file) (Rank rank) = Sq $ unsafeShiftL file 3 .|. rank
+sqFileRank (Sq (V2 file rank)) = (File file, Rank rank)
+sqFile (Sq (V2 file rank)) = File file
+sqRank (Sq (V2 file rank)) = Rank rank
+mkSq (File file) (Rank rank) = Sq (V2 file rank)
 allFiles = File <$> [0..7]
 rankSqs rank = flip mkSq rank <$> allFiles
 
-kingSq Black  = read @Sq "e8"
-kingSq White  = read @Sq "e1"
-rookSq Black KSide = read @Sq "h8"
-rookSq White KSide = read @Sq "h1"
-rookSq Black QSide = read @Sq "a8"
-rookSq White QSide = read @Sq "a1"
+kingSq Black       = readSq' "e8"
+kingSq White       = readSq' "e1"
+rookSq Black KSide = readSq' "h8"
+rookSq White KSide = readSq' "h1"
+rookSq Black QSide = readSq' "a8"
+rookSq White QSide = readSq' "a1"
 
-toBlack, toWhite, toKSide, toQSide :: Sq -> Maybe Sq
-toBlack (sqFileRank -> (file, Rank i)) = i < 7 & bool Nothing (Just $ mkSq file (Rank (i+1)))
-toWhite (sqFileRank -> (file, Rank i)) = i > 0 & bool Nothing (Just $ mkSq file (Rank (i-1)))
-toKSide (sqFileRank -> (File i, rank)) = i < 7 & bool Nothing (Just $ mkSq (File (i+1)) rank)
-toQSide (sqFileRank -> (File i, rank)) = i > 0 & bool Nothing (Just $ mkSq (File (i-1)) rank)
+toKSide q = q + (Sq (V2 1 0))
+toQSide q = q - (Sq (V2 1 0))
+toBlack q = q + (Sq (V2 0 1))
+toWhite q = q - (Sq (V2 0 1))
 
+toSide  KSide = toKSide
+toSide  QSide = toQSide
 toColor Black = toBlack
 toColor White = toWhite
+
+toDiag color side = toColor color . toSide side
+
+isEPRank c q = sqRank q == epRank c
+epSq q t = mkSq (sqFile t) (sqRank q)
+
+isValid q@(Sq (V2 file rank)) = -- bool Nothing (Just q) $
+    file >= 0 && file <= 7 &&
+    rank >= 0 && rank <= 7
 
 -- }}}
 
 -- Total {{{
 -- ------------------------------------------------------------
 
-universe :: forall a. (Bounded a, Enum a) => [a]
-universe = [minBound..maxBound]
+universe :: forall a. (Bounded a, Ix a) => [a]
+universe = range (minBound,maxBound)
 
 newtype Total a i e = Total (a i e) deriving Show
 
-totalArray :: forall a i e. (IArray a e, Bounded i, Enum i, Ix i) => [e] -> Total a i e
+totalArray :: forall a i e. (IArray a e, Bounded i, Ix i) => [e] -> Total a i e
 totalArray = Total . listArray (minBound,maxBound)
 
-totalAt :: forall a i e. (IArray a e, Bounded i, Enum i, Ix i) => i -> Lens' (Total a i e) e
-totalAt i f (Total ary) = let x = fromEnum i in
+totalAt :: forall a i e. (IArray a e, Bounded i, Ix i) => i -> Lens' (Total a i e) e
+totalAt i f (Total ary) = let x = unsafeIndex (minBound, maxBound) i in
     f (unsafeAt ary x) <&> \e -> Total $ unsafeReplace ary [(x,e)]
 
 hackAt (Total ary) idx = ary!idx
@@ -164,12 +183,12 @@ instance Show Castle where
     show x = show
         [ (c,s) | c <- universe, s <- universe, x^.castle (c,s) ]
 
-castle :: (Color,BSide) -> Lens' Castle Bool
+castle :: (Color,Side) -> Lens' Castle Bool
 castle (c,s) f (Castle r) =
     let i = fromEnum c * 2 + fromEnum s in
     f (testBit r i) <&> Castle . bool (clearBit r i) (setBit r i)
 
-castleArray :: Total Array Sq [(Color,BSide)]
+castleArray :: Total Array Sq [(Color,Side)]
 castleArray = totalArray
     [ if | sq == kingSq Black -> [(Black,KSide),(Black,QSide)]
          | sq == kingSq White -> [(White,KSide),(White,QSide)]
@@ -182,59 +201,51 @@ castleArray = totalArray
 
 -- }}}
 
--- BitBoard {{{
+-- Board {{{
 -- ------------------------------------------------------------
 
-data BitBoard = BitBoard
-    { _bbColor     :: !(Total UArray Color Word64)
-    , _bbPType     :: !(Total UArray PType Word64)
+data Board = Board
+    { _bbMap       :: !(Map Sq Piece)
     , _bbKingSq    :: !(Total Array Color Sq)
     , _bbCastle    :: !Castle
     , _bbEnPassant :: !(Maybe Sq)
     } deriving Show
-makeLenses ''BitBoard
+makeLenses ''Board
 
-sqColor BitBoard{..} (Sq q) =
-    listToMaybe [ i | i <- universe, testBit (_bbColor^.totalAt i) q ]
+sqColor Board{..} q = _bbMap ^? ix q . pColor
+sqPType Board{..} q = _bbMap ^? ix q . pType
 
-sqPType BitBoard{..} (Sq q) =
-    listToMaybe [ i | i <- universe, testBit (_bbPType^.totalAt i) q ]
-
-bbAt :: Sq -> Lens' BitBoard (Maybe Piece)
-bbAt sq@(Sq q) f bb@BitBoard{..} =
-    f m <&> \m' -> case (m,m') of
-        (Nothing,   Nothing)   -> bb
-        (Just prev, Nothing)   -> bb & update prev False
-        (Nothing,   Just next) -> bb & update next True
-        (Just prev, Just next) -> bb & update prev False . update next True
+bbAt :: Sq -> Lens' Board (Maybe Piece)
+bbAt q f bb@Board{..} =
+    f m <&> \m' -> bb & clr m . add m'
   where
-    m = Piece <$> sqColor bb sq <*> sqPType bb sq
-    update (Piece c p) b
-        = set (bbColor.totalAt c.bitAt q) b
-        . set (bbPType.totalAt p.bitAt q) b
-        . bool id (bbKingSq.totalAt c .~ sq) (b && p == King)
-        . bool id updateCastle (not b)
-      where
-        updateCastle bb = foldr f bb (castleArray^.totalAt sq)
+    m = _bbMap ^? ix q
+    clr Nothing  = id
+    clr (Just p) = (bbMap . at q .~ Nothing) . updateCastle
+    add Nothing  = id
+    add j@(Just (Piece c p))
+        = (bbMap . at q .~ j)
+        . bool id (bbKingSq.totalAt c .~ q) (p == King)
+    updateCastle bb = foldr f bb (castleArray^.totalAt q) where
         f idx = bbCastle.castle idx .~ False
 
-emptyBitBoard = BitBoard
-    (totalArray $ repeat 0)
-    (totalArray $ repeat 0)
+bbPieces Board{..} color =
+    [ (q,p) | (q, Piece c p) <- M.assocs _bbMap, c == color ]
+
+emptyBoard = Board
+    M.empty
     (totalArray $ kingSq <$> universe)
     (Castle 0)
     Nothing
 
-startBitBoard = addCastle . foldl' f emptyBitBoard $
+startBoard = addCastle . foldl' f emptyBoard $
     zip (rankSqs rank8) (Piece Black <$> ptypes) <>
     zip (rankSqs rank1) (Piece White <$> ptypes) <>
     zip (rankSqs rank7) (replicate 8 (Piece Black Pawn)) <>
     zip (rankSqs rank2) (replicate 8 (Piece White Pawn))
   where
     ptypes = [Rook,Knight,Bishop,Queen,King,Bishop,Knight,Rook]
-    f !bb (Sq q,Piece c p) = bb
-        & set (bbColor.totalAt c.bitAt q) True
-        . set (bbPType.totalAt p.bitAt q) True
+    f !bb (q,p) = bb & bbMap . at q .~ Just p
     addCastle bb = foldr add bb $ (,) <$> universe <*> universe where
         add idx = bbCastle.castle idx .~ True
 
@@ -245,8 +256,8 @@ startBitBoard = addCastle . foldl' f emptyBitBoard $
 
 data MType
     = Jump Sq | Slide [Sq]
-    | Advance Sq | Capture Sq
-    | Double Sq Sq | EnPassant Sq Sq
+    | Capture Sq | EnPassant Sq
+    | Advance Sq | Double Sq
     | CastleKSide [Sq] | CastleQSide [Sq]
     deriving Show
 makePrisms ''MType
@@ -254,44 +265,48 @@ makePrisms ''MType
 moveArray :: Array (Sq,Color,PType) [MType] -- {{{
 moveArray = genArray (minBound,maxBound) \(q,c,p) -> mkMoves q c p
 
-mkMoves q c Pawn = concat
-    [ Capture <$> mapMaybe ($ q) (xfmPawnCaptures c)
-    , sqRank q == epRank c & bool [] enPassants
-    , sqRank q == pawnRank c & bool
-        ( Advance <$> mapMaybe ($ q) [toColor $ opp c] )
-        ( maybeToList $ Double <$> one <*> two )
-    ]
+mkMoves q c Pawn =
+    ( if | sqRank q == epRank c -> EnPassant <$> attacks
+         | otherwise            -> Capture   <$> attacks ) <>
+    ( if | sqRank q == pieceRank c       -> []
+         | sqRank q == pieceRank (opp c) -> []
+         | sqRank q == pawnRank c        -> [Double  advance]
+         | otherwise                     -> [Advance advance] )
   where
-    one = toColor (opp c) q
-    two = toColor (opp c) =<< one
-    enPassants = catMaybes
-        [ EnPassant <$> mv <*> ep
-        | side <- [toQSide,toKSide]
-        , let ep = side q
-        , let mv = side q >>= toColor (opp c) ]
+    attacks = [ q' | s <- universe, let q' = toDiag (opp c) s q, isValid q' ]
+    advance = toColor (opp c) q
+
+mkMoves q c Knight =
+    map Jump =<< gen <$> universe <*> universe
+  where
+    gen c s = filter isValid
+        [ toColor c $ toColor c $ toSide s q
+        , toColor c $ toSide  s $ toSide s q ]
+
+mkMoves q c Bishop =
+    map Slide $ gen <$> universe <*> universe
+  where
+    gen c s = takeWhile isValid $ tail $ iterate (toDiag c s) q
+
+mkMoves q c Rook =
+    (Slide <$> slide toColor) <>
+    (Slide <$> slide toSide)
+  where
+    slide :: forall a. (Bounded a, Ix a) => (a -> Sq -> Sq) -> [[Sq]]
+    slide f = [ takeWhile isValid $ tail $ iterate (f a) q | a <- universe ]
+
+mkMoves q c Queen  = mkMoves q c Bishop <> mkMoves q c Rook
 
 mkMoves q c King =
-    ( Jump <$> delete q (mapMaybe ($ q) xfmKing) ) <>
-    ( q == kingSq c & bool []
-        [ CastleQSide $ take 4 $ iterate (fromJust.toQSide) (kingSq c)
-        , CastleKSide $ take 3 $ iterate (fromJust.toKSide) (kingSq c)
-        ] )
+    ( Jump <$> cands ) <>
+    ( q == ksq & bool []
+        [ CastleQSide $ take 4 $ iterate toQSide ksq
+        , CastleKSide $ take 3 $ iterate toKSide ksq ] )
+  where
+    ksq = kingSq c
+    cands = filter isValid $ delete q $ ($ q) <$> xfms
+    xfms = (.) <$> [toBlack,id,toWhite] <*> [toKSide,id,toQSide]
 
-mkMoves q c Rook   = Slide <$> xfmRepeat q <$> xfmOrtho
-mkMoves q c Bishop = Slide <$> xfmRepeat q <$> xfmDiags
-mkMoves q c Queen  = mkMoves q c Rook <> mkMoves q c Bishop
-mkMoves q c Knight = Jump <$> mapMaybe ($ q) xfmKnight
-
-xfmRepeat q xfm = unfoldr (fmap double . xfm) q where double x = (x,x)
-
-xfmPawnCaptures c = (>=>) (toColor $ opp c) <$> [toQSide,toKSide]
-xfmOrtho = [toBlack,toWhite,toQSide,toKSide]
-xfmDiags = (>=>) <$> [toBlack,toWhite] <*> [toQSide,toKSide]
-xfmKing = (>=>) <$> [toBlack, Just, toWhite] <*> [toKSide, Just, toQSide]
-xfmKnight =
-    ( (>=>) <$> [twice toBlack, twice toWhite] <*> [toKSide, toQSide] ) <>
-    ( (>=>) <$> [toBlack, toWhite] <*> [twice toKSide, twice toQSide] )
-  where twice f = f >=> f
 -- }}}
 -- }}}
 
@@ -300,38 +315,40 @@ xfmKnight =
 
 data Valid
     = MoveTo Sq
-    | DoubleTo Sq | EPTo Sq Sq
+    | DoubleTo Sq | EPTo Sq
     | KSideTo Sq | QSideTo Sq
     deriving Show
 makePrisms ''Valid
 
--- {{{
 type UCIMove = Text
 
+-- {{{
 mkUCI src = \case
-    MoveTo   tgt   -> uci tgt
-    DoubleTo tgt   -> uci tgt
-    EPTo     tgt _ -> uci tgt
-    KSideTo  tgt   -> uci tgt
-    QSideTo  tgt   -> uci tgt
+    MoveTo   tgt -> uci tgt
+    DoubleTo tgt -> uci tgt
+    EPTo     tgt -> uci tgt
+    KSideTo  tgt -> uci tgt
+    QSideTo  tgt -> uci tgt
   where uci tgt = pack $ show src <> show tgt
 
 validMoves bb c m = case m of
-    Jump t | sqColor bb t /= Just c -> [MoveTo t]
     Slide tt ->
         let (ee,xx@(~(x:_))) = span ((==Nothing).sqColor bb) tt in
         if null xx || sqColor bb x == Just c
            then MoveTo <$> ee
            else MoveTo <$> (x:ee)
-    Advance t | sqColor bb t == Nothing      -> [MoveTo t]
-    Capture t | sqColor bb t == Just (opp c) -> [MoveTo t]
-    EnPassant u v | bb^.bbEnPassant == Just u -> [EPTo u v]
-    Double u v | sqColor bb u == Nothing -> [MoveTo u] <>
-        bool [] [DoubleTo v] (sqColor bb v == Nothing)
-    CastleKSide tt | canCastle KSide tt -> [KSideTo $ tt!!2]
-    CastleQSide tt | canCastle QSide tt -> [QSideTo $ tt!!2]
+    Jump t         | sqColor bb t /= Just c       -> [MoveTo t]
+    Advance t      | sqColor bb t == Nothing      -> [MoveTo t]
+    Capture t      | sqColor bb t == Just (opp c) -> [MoveTo t]
+    EnPassant t    | sqColor bb t == Just (opp c) -> [MoveTo t]
+                   | bb^.bbEnPassant == Just t    -> [EPTo t]
+    Double t       | sqColor bb t == Nothing      -> [MoveTo t] <> double t
+    CastleKSide tt | canCastle KSide tt           -> [KSideTo $ tt!!2]
+    CastleQSide tt | canCastle QSide tt           -> [QSideTo $ tt!!2]
     _ -> []
   where
+    double t = let t' = toColor (opp c) t in
+        sqColor bb t' == Nothing & bool [] [DoubleTo t']
     canCastle side tt =
         ( bb^.bbCastle.castle (c,side)) &&
         ( all ((==Nothing).sqColor bb) (tail tt) ) &&
@@ -346,14 +363,13 @@ applyMove bb c q v =
   where
     inCheck = isAttacked bb' c (bb' ^. bbKingSq.totalAt c)
     bb' = bb & set bbEnPassant Nothing . case v of
-        MoveTo   t   -> move q t
-        DoubleTo t   -> move q t . set bbEnPassant (toColor c t)
-        EPTo     t u -> move q t . clear u
-        KSideTo  t   -> move q t . move (rookSq c KSide) (fromJust $ toQSide t)
-        QSideTo  t   -> move q t . move (rookSq c QSide) (fromJust $ toKSide t)
-    move a b = let Just p = bb^.bbAt a in clear a . place b p
-    clear a   = set (bbAt a) Nothing
-    place a p = set (bbAt a) (Just p)
+        MoveTo   t -> move q t
+        DoubleTo t -> move q t . set bbEnPassant (Just $ toColor c t)
+        EPTo     t -> move q t . set (bbAt $ epSq q t) Nothing
+        KSideTo  t -> move q t . move (rookSq c KSide) (toQSide t)
+        QSideTo  t -> move q t . move (rookSq c QSide) (toKSide t)
+    move a b = let m@(Just _) = bb ^. bbAt a in
+        set (bbAt a) Nothing . set (bbAt b) m
 
 -- }}}
 
@@ -387,17 +403,18 @@ isAttacked bb c q =
 -- getMoves {{{
 -- ------------------------------------------------------------
 
-getMoves :: BitBoard -> Color -> [(UCIMove,BitBoard)]
+getValidMoves bb c =
+    [ (q,valid)
+    | (q,p) <- bbPieces bb c
+    , raw   <- moveArray!(q,c,p)
+    , valid <- validMoves bb c raw
+    ]
+
+getMoves :: Board -> Color -> [(UCIMove,Board)]
 getMoves bb c =
     [ (mkUCI q valid, bb')
-    | q <- universe
-    , sqColor bb q == Just c
-    , let mp = sqPType bb q
-    -- , bool (traceShow (c,mp) False) True $ isJust mp
-    , let Just p = sqPType bb q
-    , raw <- moveArray!(q,c,p)
-    , valid <- validMoves bb c raw
-    , bb' <- applyMove bb c q valid
+    | (q,valid) <- getValidMoves bb c
+    , bb'       <- applyMove bb c q valid
     ]
 
 -- }}}
@@ -409,7 +426,7 @@ data Chess = Chess
     , _chessStatus :: !(Maybe ChessResult)
     , _chessDepth  :: !Int
     , _chessMoves  :: !(NonEmpty UCIMove)
-    , _chessBoard  :: !BitBoard
+    , _chessBoard  :: !Board
     } deriving Show
 makeLenses ''Chess
 
@@ -419,7 +436,7 @@ instance Game Chess Color UCIMove ChessResult where
     gameMoves    = _chessMoves
     gameChildren = chessChildren
 
-initChess = Chess White Nothing 0 (pack "init":|[]) startBitBoard
+initChess = Chess White Nothing 0 (pack "init":|[]) startBoard
 
 inCheck Chess{..} =
     isAttacked _chessBoard _chessPlayer
