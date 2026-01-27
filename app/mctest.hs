@@ -2,12 +2,16 @@ module Main where
 
 import GHC.Conc
 
-import Quux
+import MCTS
+import TTT
+import Chess
 
 main = do
-    [n] <- getArgs <&> map (read @Int)
+    [game, read @Int -> n] <- getArgs
     numcpu <- getNumProcessors
     numcap <- getNumCapabilities
     putStrLn $ "numProcessors   = " <> show numcpu
     putStrLn $ "numCapabilities = " <> show numcap
-    mctSearchTest initChess n
+    case game of
+        "ttt"   -> mctSearchTest initTTT n
+        "chess" -> mctSearchTest initChess n

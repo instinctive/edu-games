@@ -43,37 +43,30 @@ common shared -- {{{
 
 library
   import: shared
-  hs-source-dirs: src, src/game, src/mct
-  exposed-modules: Games
-  other-modules: Game, MCT
-
-library quux
-  import: shared
-  hs-source-dirs: src/quux, src/game, src/mct, src/ttt, src/chess
-  exposed-modules: Quux
-  other-modules: Game, MCT, TTT, Chess
+  reexported-modules: Game, TTT, Chess, MCTS
+  build-depends: game, mcts, ttt, chess
 
 library game
   import: shared
-  hs-source-dirs: src/game
+  hs-source-dirs: src-game
   exposed-modules: Game
 
-library mct
+library mcts
   import: shared
-  hs-source-dirs: src/mct
-  exposed-modules: MCT
+  hs-source-dirs: src-mcts
+  exposed-modules: MCTS, MCTS.Internal
   build-depends: game
 
 library ttt
   import: shared
-  hs-source-dirs: src/ttt
-  exposed-modules: TTT
+  hs-source-dirs: src-ttt
+  exposed-modules: TTT, TTT.Internal
   build-depends: game
 
 library chess
   import: shared
-  hs-source-dirs: src/chess
-  exposed-modules: Chess
+  hs-source-dirs: src-chess
+  exposed-modules: Chess, Chess.Internal
   build-depends: game
 
 executable mctest
@@ -81,5 +74,5 @@ executable mctest
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   main-is: mctest.hs
   hs-source-dirs: app
-  build-depends: quux
+  build-depends: games
 

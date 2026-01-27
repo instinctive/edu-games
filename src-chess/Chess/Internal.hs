@@ -1,11 +1,9 @@
 -- Pragmas and Imports {{{
 -- ------------------------------------------------------------
 
--- {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell   #-}
 
-module Chess where
--- module Chess ( initChess ) where
+module Chess.Internal where
 
 import Control.Lens hiding ( universe, (<|) )
 import Control.Lens.Extras ( is )

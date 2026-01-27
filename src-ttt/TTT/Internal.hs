@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module TTT ( initTTT ) where
+module TTT.Internal where
 
 import Control.Lens hiding ((<|))
 import Data.List.Split (chunksOf)

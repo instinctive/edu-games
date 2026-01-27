@@ -1,6 +1,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 
-module MCT where
+module MCTS.Internal where
 
 import Control.Concurrent.Async ( withAsync )
 import Control.Concurrent.STM
