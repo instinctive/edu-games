@@ -354,23 +354,6 @@ validMoves bb c m = case m of
 -- }}}
 -- }}}
 
--- applyMove {{{
-
-applyMove bb c q v =
-    if inCheck then [] else [bb']
-  where
-    inCheck = isAttacked bb' c (bb' ^. bbKingSq.totalAt c)
-    bb' = bb & set bbEnPassant Nothing . case v of
-        MoveTo   t -> move q t
-        DoubleTo t -> move q t . set bbEnPassant (Just $ toColor c t)
-        EPTo     t -> move q t . set (bbAt $ epSq q t) Nothing
-        KSideTo  t -> move q t . move (rookSq c KSide) (toQSide t)
-        QSideTo  t -> move q t . move (rookSq c QSide) (toKSide t)
-    move a b = let m@(Just _) = bb ^. bbAt a in
-        set (bbAt a) Nothing . set (bbAt b) m
-
--- }}}
-
 -- isAttacked {{{
 -- ------------------------------------------------------------
 
@@ -395,6 +378,23 @@ isAttacked bb c q =
     final (_:xx@(_:_)) = final xx
     final xx = xx
     ptypes = concatMap \(MoveTo sq) -> sqPType bb sq & maybeToList
+
+-- }}}
+
+-- applyMove {{{
+
+applyMove bb c q v =
+    if inCheck then [] else [bb']
+  where
+    inCheck = isAttacked bb' c (bb' ^. bbKingSq.totalAt c)
+    bb' = bb & set bbEnPassant Nothing . case v of
+        MoveTo   t -> move q t
+        DoubleTo t -> move q t . set bbEnPassant (Just $ toColor c t)
+        EPTo     t -> move q t . set (bbAt $ epSq q t) Nothing
+        KSideTo  t -> move q t . move (rookSq c KSide) (toQSide t)
+        QSideTo  t -> move q t . move (rookSq c QSide) (toKSide t)
+    move a b = let m@(Just _) = bb ^. bbAt a in
+        set (bbAt a) Nothing . set (bbAt b) m
 
 -- }}}
 
