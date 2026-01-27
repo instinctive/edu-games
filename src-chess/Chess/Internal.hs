@@ -264,10 +264,9 @@ moveArray :: Array (Sq,Color,PType) [MType] -- {{{
 moveArray = genArray (minBound,maxBound) \(q,c,p) -> mkMoves q c p
 
 mkMoves q c Pawn =
-    ( if | sqRank q == epRank c -> EnPassant <$> attacks
-         | otherwise            -> Capture   <$> attacks ) <>
-    ( if | sqRank q == pieceRank c       -> []
-         | sqRank q == pieceRank (opp c) -> []
+    ( Capture <$> attacks ) <>
+    ( sqRank q == epRank c & bool [] (EnPassant <$> attacks) ) <>
+    ( if | sqRank q == pieceRank (opp c) -> []
          | sqRank q == pawnRank c        -> [Double  advance]
          | otherwise                     -> [Advance advance] )
   where
@@ -338,8 +337,7 @@ validMoves bb c m = case m of
     Jump t         | sqColor bb t /= Just c       -> [MoveTo t]
     Advance t      | sqColor bb t == Nothing      -> [MoveTo t]
     Capture t      | sqColor bb t == Just (opp c) -> [MoveTo t]
-    EnPassant t    | sqColor bb t == Just (opp c) -> [MoveTo t]
-                   | bb^.bbEnPassant == Just t    -> [EPTo t]
+    EnPassant t    | bb^.bbEnPassant == Just t    -> [EPTo t]
     Double t       | sqColor bb t == Nothing      -> [MoveTo t] <> double t
     CastleKSide tt | canCastle KSide tt           -> [KSideTo $ tt!!2]
     CastleQSide tt | canCastle QSide tt           -> [QSideTo $ tt!!2]
