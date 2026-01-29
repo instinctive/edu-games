@@ -23,3 +23,24 @@ class Search s g m | s -> g, s -> m where
     makeBestMove :: s -> IO m
     makeThisMove :: s -> m -> IO Bool
     searchCount  :: s -> IO Int
+
+class UIText g m | g -> m where
+    showGame  :: g -> String
+    parseMove :: g -> String -> Maybe m
+
+-- ------------------------------------------------------------
+
+playGame g = do
+    putStr $ showGame g
+    gameStatus g & maybe (loop $ gameChildren g) pure
+  where
+    move gg m = find ((==m).last) gg
+    last (gameMoves -> m:|_) = m
+    loop [] = error "no children but game not over"
+    loop gg = do
+        s <- getLine
+        case parseMove g s >>= move gg of
+            Just g' -> playGame g'
+            Nothing -> do
+                putStrLn $ "invalid move: " <> show s
+                loop gg

@@ -1,3 +1,4 @@
 module TTT ( initTTT ) where
 
-import TTT.Internal
+import TTT.Game ( initTTT )
+import TTT.UIText ( )

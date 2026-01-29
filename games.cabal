@@ -60,7 +60,8 @@ library mcts
 library ttt
   import: shared
   hs-source-dirs: src-ttt
-  exposed-modules: TTT, TTT.Internal
+  exposed-modules: TTT
+  other-modules: TTT.Game, TTT.UIText
   build-depends: game
 
 library chess
@@ -75,4 +76,12 @@ executable mctest
   main-is: mctest.hs
   hs-source-dirs: app
   build-depends: games
+
+executable playTTT
+  import: shared
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  main-is: playTTT.hs
+  hs-source-dirs: app
+  build-depends: games
+
 
