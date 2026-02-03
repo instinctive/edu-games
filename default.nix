@@ -6,6 +6,7 @@ let
       pkgs.haskell.lib.addBuildTools drv (with pkgs.haskellPackages; [
         cabal-install
         ghcid
+        hpack
         markdown-unlit
       ]);
     returnShellEnv = true;

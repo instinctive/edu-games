@@ -1,0 +1,5 @@
+multi-repl: True
+
+packages:
+    game/
+    ttt/

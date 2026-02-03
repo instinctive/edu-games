@@ -1,0 +1,41 @@
+language: GHC2021
+
+ghc-options: -O2
+
+default-extensions:
+  - BlockArguments
+  - CPP
+  - DataKinds
+  - DerivingStrategies
+  - LambdaCase
+  - MultiWayIf
+  - RecordWildCards
+  - TypeFamilies
+  - ViewPatterns
+
+dependencies:
+  - name: base
+    mixin:
+      - hiding (Prelude)
+  - name: base-prelude
+    mixin:
+      - (BasePrelude as Prelude)
+
+  - MonadRandom
+  - ansi-terminal
+  - array
+  - async
+  - containers
+  - extra
+  - lens
+  - linear
+  - llrbtree
+  - mtl
+  - pcre-heavy
+  - random
+  - random-shuffle
+  - split
+  - stm
+  - tagged
+  - text
+  - unix

@@ -1,0 +1,8 @@
+name: ttt
+defaults:
+  local: ../common.yaml
+
+internal-libraries:
+  internal:
+    exposed-modules: TTT.Game, TTT.UIText
+    dependencies: game

@@ -1,0 +1,7 @@
+name: game
+defaults:
+  local: ../common.yaml
+
+library:
+  exposed-modules: Game
+  other-modules: Paths_game
